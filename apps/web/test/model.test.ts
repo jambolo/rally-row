@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { fitPosterior, outcomeProbabilities, predict, teamEstimates } from '../src/model.ts';
+import {
+  fitPosterior,
+  formatTwoWayMoneyline,
+  outcomeProbabilities,
+  predict,
+  teamEstimates,
+  twoWayMoneylines,
+} from '../src/model.ts';
 import { config, seed, game } from './helpers.ts';
 
 describe('Bayesian model', () => {
@@ -73,5 +80,45 @@ describe('Bayesian model', () => {
       expect(p.home_win + p.away_win + p.tie).toBeCloseTo(1, 12);
       expect(Object.values(p).every((x) => Number.isFinite(x) && x >= 0 && x <= 1)).toBe(true);
     }
+  });
+});
+
+describe('two-way moneyline', () => {
+  const lines = (home_win: number, away_win: number) => twoWayMoneylines({ home_win, away_win, tie: 1 - home_win - away_win });
+  it('prices favorites negative and underdogs positive', () => {
+    expect(lines(0.6, 0.4)).toEqual({ home: -150, away: 150 });
+    expect(lines(0.25, 0.75)).toEqual({ home: 300, away: -300 });
+    expect(lines(0.9, 0.1)).toEqual({ home: -900, away: 900 });
+  });
+  it('shows even money as +100 on both sides', () => {
+    expect(lines(0.5, 0.5)).toEqual({ home: 100, away: 100 });
+    expect(lines(0.501, 0.499)).toEqual({ home: 100, away: 100 });
+    expect(lines(0.4985, 0.4985)).toEqual({ home: 100, away: 100 });
+  });
+  it('rounds both sides to exact mirror images at half-point boundaries', () => {
+    // 68/32 = 2.125, so the unrounded line is exactly 212.5.
+    expect(lines(0.32, 0.68)).toEqual({ home: 213, away: -213 });
+    expect(lines(0.68, 0.32)).toEqual({ home: -213, away: 213 });
+  });
+  it('treats a tie as a push by conditioning on a decisive game', () => {
+    // 75.9% / 23.8% / 0.3% tie -> 76.13% / 23.87% once ties are removed.
+    expect(lines(0.759, 0.238)).toEqual({ home: -319, away: 319 });
+  });
+  it('is symmetric whatever the tie probability', () => {
+    for (const tie of [0, 0.003, 0.2]) {
+      const decisive = 1 - tie;
+      expect(lines(0.7 * decisive, 0.3 * decisive)).toEqual({ home: -233, away: 233 });
+    }
+  });
+  it('returns null for degenerate probabilities', () => {
+    expect(twoWayMoneylines({ home_win: 0, away_win: 0, tie: 1 })).toEqual({ home: null, away: null });
+    expect(lines(1, 0)).toEqual({ home: null, away: null });
+    expect(lines(0, 1)).toEqual({ home: null, away: null });
+    expect(lines(1, Number.MIN_VALUE)).toEqual({ home: null, away: null });
+  });
+  it('formats with a plus sign for positive lines and a dash when undefined', () => {
+    expect(formatTwoWayMoneyline(150)).toBe('+150');
+    expect(formatTwoWayMoneyline(-150)).toBe('-150');
+    expect(formatTwoWayMoneyline(null)).toBe('—');
   });
 });

@@ -26,6 +26,22 @@ export function outcomeProbabilities(difference: number, tieWeight: number): Pro
     tie: weights[2] / total,
   };
 }
+/**
+ * Fair (no-vig) two-way American moneylines: the favorite is negative, the underdog positive.
+ * A tie is a push, so each side is priced as if the game is decisive. Conditioning on no tie
+ * leaves the home:away odds ratio unchanged, so both lines come from that one ratio and are
+ * exact mirror images. Even money is +100 on both sides.
+ */
+export function twoWayMoneylines(p: Probabilities): { home: number | null; away: number | null } {
+  if (!(p.home_win > 0 && p.away_win > 0)) return { home: null, away: null };
+  const magnitude = Math.round((100 * Math.max(p.home_win, p.away_win)) / Math.min(p.home_win, p.away_win));
+  if (!Number.isFinite(magnitude)) return { home: null, away: null };
+  if (magnitude === 100) return { home: 100, away: 100 };
+  return p.home_win > p.away_win ? { home: -magnitude, away: magnitude } : { home: magnitude, away: -magnitude };
+}
+export function formatTwoWayMoneyline(line: number | null): string {
+  return line === null ? '—' : line > 0 ? `+${line}` : `${line}`;
+}
 function zeros(n: number) {
   return Array.from({ length: n }, () => Array<number>(n).fill(0));
 }

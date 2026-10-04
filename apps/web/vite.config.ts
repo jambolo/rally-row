@@ -1,6 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { extname, join, posix, relative, resolve } from 'node:path';
-import type { Plugin } from 'vite';
+import type { Connect, Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
@@ -22,26 +22,42 @@ function projectData(): Plugin {
       else if (extname(path) === '.json') yield path;
     }
   }
+  /** Serves `<base><mount>/...` from `roots[mount]`. A missing file is a 404, as on Pages, rather than the SPA
+   * fallback's index.html, so the app reports the file as unpublished instead of failing to parse HTML.
+   */
+  function serve(base: string, roots: Record<string, string>): Connect.NextHandleFunction {
+    return (req, res, next) => {
+      const url = decodeURIComponent((req.url ?? '').split('?')[0] ?? '');
+      if (!url.startsWith(base)) return next();
+      const path = url.slice(base.length - 1);
+      const mount = Object.keys(roots).find((m) => path.startsWith(`${m}/`));
+      if (!mount) return next();
+      const root = roots[mount]!;
+      const file = resolve(root, path.slice(mount.length + 1));
+      // Confine reads to the mounted directory.
+      if (relative(root, file).startsWith('..')) return next();
+      readFile(file).then(
+        (bytes) => {
+          res.setHeader('Content-Type', types[extname(file)] ?? 'application/octet-stream');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(bytes);
+        },
+        () => {
+          res.statusCode = 404;
+          res.end();
+        },
+      );
+    };
+  }
   return {
     name: 'project-data',
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        const path = decodeURIComponent((req.url ?? '').split('?')[0] ?? '');
-        const mount = Object.keys(mounts).find((m) => path.startsWith(`${m}/`));
-        if (!mount) return next();
-        const root = mounts[mount]!;
-        const file = resolve(root, path.slice(mount.length + 1));
-        // Confine reads to the mounted directory.
-        if (relative(root, file).startsWith('..')) return next();
-        readFile(file).then(
-          (bytes) => {
-            res.setHeader('Content-Type', types[extname(file)] ?? 'application/octet-stream');
-            res.setHeader('Cache-Control', 'no-store');
-            res.end(bytes);
-          },
-          () => next(),
-        );
-      });
+      server.middlewares.use(serve(server.config.base, mounts));
+    },
+    configurePreviewServer(server) {
+      const outDir = resolve(server.config.root, server.config.build.outDir);
+      const built = Object.fromEntries(Object.keys(mounts).map((m) => [m, join(outDir, m.slice(1))]));
+      server.middlewares.use(serve(server.config.base, built));
     },
     async generateBundle() {
       for (const [mount, root] of Object.entries(mounts)) {
