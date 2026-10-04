@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { message } from './service.ts';
-import { predict, type Prediction } from './model.ts';
+import { formatTwoWayMoneyline, predict, twoWayMoneylines, type Prediction } from './model.ts';
 import { startSession, type SessionView } from './session.ts';
 import { leagueIds } from './leagues.ts';
 import { hashChangeTarget, loadLeagueConfigs, localMonthDay, recordSwitch, startupLeague } from './selection.ts';
@@ -116,6 +116,7 @@ export default function App() {
       return { prediction: null, predictionError: message(e) };
     }
   }, [model, state?.status, home, away, neutral, phase]);
+  const twoWayLines = prediction ? twoWayMoneylines(prediction) : { home: null, away: null };
   const teams = [...(state?.teams ?? [])].sort((a, b) => a.name.localeCompare(b.name));
   const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? id;
   const teamLabel = (id: string) => teams.find((t) => t.id === id)?.abbreviation ?? id;
@@ -327,6 +328,9 @@ export default function App() {
                       <span className="team-code">{teamLabel(home)}</span>
                       <strong>{percent(prediction.home_win)}</strong>
                       <small>{teamName(home)} chance of winning</small>
+                      <span className="moneyline" title="Fair two-way moneyline (no vig; a tie is a push)">
+                        Two-way ML {formatTwoWayMoneyline(twoWayLines.home)}
+                      </span>
                     </div>
                     <div className="tie-probability">
                       <span>Tie</span>
@@ -341,6 +345,9 @@ export default function App() {
                       <span className="team-code">{teamLabel(away)}</span>
                       <strong>{percent(prediction.away_win)}</strong>
                       <small>{teamName(away)} chance of winning</small>
+                      <span className="moneyline" title="Fair two-way moneyline (no vig; a tie is a push)">
+                        Two-way ML {formatTwoWayMoneyline(twoWayLines.away)}
+                      </span>
                     </div>
                   </div>
                   <div

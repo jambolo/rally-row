@@ -20,9 +20,11 @@ export {
 export { adapterFor, isSourceKind, type SourceAdapter } from './adapters/index.ts';
 export {
   fitPosterior,
+  formatTwoWayMoneyline,
   outcomeProbabilities,
   predict,
   teamEstimates,
+  twoWayMoneylines,
   type Posterior,
   type Prediction,
   type Probabilities,

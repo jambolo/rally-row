@@ -69,10 +69,15 @@ and February 20 to MLB (neither league is in season and MLB's season starts soon
    both leagues, and the tie column shows the league's note instead.
 5. Read each team's chance of winning and the chance of a tie. Expand **How certain is this estimate?**
    for the approximate 95% credible interval for the home team's (or Team A's) win probability.
+6. Read each team's **Two-way ML**, the fair American moneyline implied by the model, with no bookmaker
+   margin (vig). A two-way line treats a tie as a push (the stake is refunded), so it prices each team's
+   chance of winning a decisive game. For example, 75.9% / 23.8% with a 0.3% tie becomes 76.1% / 23.9%,
+   shown as −319 / +319. The two lines are always mirror images, and even money is shown as +100.
 
 The probabilities describe possible outcomes, not predicted scores. The uncertainty interval describes
 how precisely the model estimates a team's win probability; it is not a range of possible game scores.
-Displayed percentages are rounded, so their sum can differ slightly from 100%.
+Displayed percentages are rounded, so their sum can differ slightly from 100%. The moneylines are the
+model's fair prices, not betting advice or market odds.
 
 ### Follow the season
 
