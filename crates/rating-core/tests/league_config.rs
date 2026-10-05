@@ -1,7 +1,6 @@
 use rating_core::load_league_config;
 use std::{fs, path::Path};
-
-const CONFIG_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../config");
+use test_support::CONFIG_DIR;
 
 #[test]
 fn loads_the_league_file_from_the_config_dir() {

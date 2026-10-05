@@ -1,14 +1,14 @@
 use anyhow::{Context, Result};
 use rating_core::{
-    BayesianSettings, EloSettings, Game, GameFile, LeagueConfig, Outcome,
-    bayesian::{Probabilities, fit_posterior, outcome_probabilities},
-    build_seed, expected_home,
+    BayesianSettings, EloSettings, GameFile, LeagueConfig, Outcome, apply_game,
+    bayesian::{Probabilities, outcome_probabilities},
+    expected_home,
+    scoring::{self, CalibrationBin, calibration, mean, standard_error},
     tuning::{Split, validate},
+    walk_forward::{Preseason, posteriors_by_utc_date, preseason},
 };
 use serde::Serialize;
 use std::{cmp::Ordering, collections::BTreeMap, fmt::Write as _};
-
-const OUTCOMES: [Outcome; 3] = [Outcome::HomeWin, Outcome::AwayWin, Outcome::Tie];
 
 /// One method's pregame forecast for a game.
 #[derive(Clone, Copy)]
@@ -57,52 +57,16 @@ impl Method {
     }
 }
 
-fn observed_score(outcome: &Outcome) -> f64 {
-    match outcome {
-        Outcome::HomeWin => 1.0,
-        Outcome::AwayWin => 0.0,
-        Outcome::Tie => 0.5,
-    }
-}
-
-/// Updates ratings game by game in the given order, exactly as the historical Elo replay does.
-fn update_elo(ratings: &mut BTreeMap<String, f64>, games: &[Game], cfg: &EloSettings) -> Result<()> {
-    for g in games {
-        let home = ratings[&g.home_team];
-        let away = ratings[&g.away_team];
-        let outcome = g.result.as_ref().context("Cannot score an unreported game")?;
-        let delta = cfg.k * (observed_score(outcome) - expected_home(home, away, g.neutral, cfg));
-        ratings.insert(g.home_team.clone(), home + delta);
-        ratings.insert(g.away_team.clone(), away - delta);
-    }
-    Ok(())
-}
-
 /// Predicts every game of `season` from earlier UTC dates only; returns the season's tie weight and the rows.
 fn predict_season(history: &GameFile, cfg: &LeagueConfig, season: i32) -> Result<(f64, Vec<GameRow>)> {
-    let previous = GameFile {
-        through_season: season - 1,
-        games: history.games.iter().filter(|g| g.season < season).cloned().collect(),
-        ..history.clone()
-    };
     // Both methods start from the same preseason Elo ratings and tie weight, built from earlier seasons only.
-    let mut seed = build_seed(&previous, b"", cfg, b"", season)?;
-    seed.audit.clear();
+    let Preseason { seed, games, .. } = preseason(history, cfg, season)?;
     let mut ratings: BTreeMap<_, _> = seed.ratings.iter().map(|r| (r.team.clone(), r.elo)).collect();
-    let mut games: Vec<_> = history.games.iter().filter(|g| g.season == season).cloned().collect();
-    games.sort_by(|a, b| a.start_time_utc.cmp(&b.start_time_utc).then(a.id.cmp(&b.id)));
     let factor = std::f64::consts::LN_10 / cfg.elo.scale;
     let mut rows = Vec::with_capacity(games.len());
-    let mut start = 0;
-    while start < games.len() {
-        let date = games[start].start_time_utc.date_naive();
-        let end = start
-            + games[start..]
-                .iter()
-                .take_while(|g| g.start_time_utc.date_naive() == date)
-                .count();
-        let model = fit_posterior(&seed, &games[..start], cfg).with_context(|| format!("Fit season {season} before {date}"))?;
-        for g in &games[start..end] {
+    for fit in posteriors_by_utc_date(&seed, &games, cfg) {
+        let (model, date_games) = fit?;
+        for g in date_games {
             let nu = if cfg.ties_allowed_in.contains(&g.phase) {
                 seed.tie_weight
             } else {
@@ -122,8 +86,9 @@ fn predict_season(history: &GameFile, cfg: &LeagueConfig, season: i32) -> Result
             });
         }
         // Elo learns from a date only after all of its games are predicted, matching the Bayesian information set.
-        update_elo(&mut ratings, &games[start..end], &cfg.elo)?;
-        start = end;
+        for g in date_games {
+            apply_game(&mut ratings, g, &cfg.elo)?;
+        }
     }
     Ok((seed.tie_weight, rows))
 }
@@ -145,12 +110,9 @@ fn loss(prediction: &Prediction, outcome: &Outcome) -> GameLoss {
         Ordering::Equal => 0.5,
     };
     GameLoss {
-        log_loss: -p.for_outcome(outcome).max(1e-15).ln(),
-        brier: OUTCOMES
-            .iter()
-            .map(|o| (p.for_outcome(o) - f64::from(o == outcome)).powi(2))
-            .sum(),
-        squared_error: (prediction.expected_home_score - observed_score(outcome)).powi(2),
+        log_loss: scoring::log_loss(p, outcome),
+        brier: scoring::brier(p, outcome),
+        squared_error: (prediction.expected_home_score - outcome.home_score()).powi(2),
         pick: match outcome {
             Outcome::HomeWin => Some(credit(p.home_win, p.away_win)),
             Outcome::AwayWin => Some(credit(p.away_win, p.home_win)),
@@ -260,18 +222,6 @@ impl Metric {
     }
 }
 
-fn mean(values: &[f64]) -> Option<f64> {
-    (!values.is_empty()).then(|| values.iter().sum::<f64>() / values.len() as f64)
-}
-
-fn standard_error(values: &[f64]) -> Option<f64> {
-    (values.len() >= 2).then(|| {
-        let n = values.len() as f64;
-        let mean = values.iter().sum::<f64>() / n;
-        (values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0) / n).sqrt()
-    })
-}
-
 #[derive(Clone, Serialize)]
 pub struct SeasonScore {
     season: i32,
@@ -287,16 +237,6 @@ pub struct MeanSeason {
     brier: f64,
     expected_score_mse: f64,
     accuracy: Option<f64>,
-}
-
-#[derive(Clone, Serialize)]
-pub struct CalibrationBin {
-    outcome: Outcome,
-    lower: f64,
-    upper: f64,
-    games: usize,
-    mean_probability: f64,
-    observed_rate: f64,
 }
 
 #[derive(Clone, Serialize)]
@@ -322,27 +262,6 @@ fn evaluate(rows: &[GameRow], method: Method) -> Result<Evaluation> {
         })
         .collect::<Vec<_>>();
     let mean_of = |metric: Metric| mean(&seasons.iter().filter_map(|s| metric.of_score(&s.overall)).collect::<Vec<_>>());
-    let mut calibration = Vec::new();
-    for outcome in OUTCOMES {
-        let mut bins = [(0_usize, 0.0, 0_usize); 10];
-        for row in rows {
-            let p = method.prediction(row).probabilities.for_outcome(&outcome);
-            let bin = &mut bins[((p * 10.0) as usize).min(9)];
-            bin.0 += 1;
-            bin.1 += p;
-            bin.2 += usize::from(row.outcome == outcome);
-        }
-        for (i, (games, total, observed)) in bins.into_iter().enumerate().filter(|(_, b)| b.0 > 0) {
-            calibration.push(CalibrationBin {
-                outcome: outcome.clone(),
-                lower: i as f64 / 10.0,
-                upper: (i + 1) as f64 / 10.0,
-                games,
-                mean_probability: total / games as f64,
-                observed_rate: observed as f64 / games as f64,
-            });
-        }
-    }
     Ok(Evaluation {
         games: rows.len(),
         mean_season: MeanSeason {
@@ -353,7 +272,7 @@ fn evaluate(rows: &[GameRow], method: Method) -> Result<Evaluation> {
         },
         pooled: score(rows, method).context("Empty evaluation")?,
         seasons,
-        calibration,
+        calibration: calibration(rows, |row| (method.prediction(row).probabilities, &row.outcome)),
     })
 }
 
@@ -639,17 +558,12 @@ mod tests {
 
     #[test]
     fn season_elo_updates_match_the_historical_replay() {
-        let (cfg, history) = crate::fixtures::fixture();
-        let previous = GameFile {
-            through_season: 2004,
-            games: history.games.iter().filter(|g| g.season < 2005).cloned().collect(),
-            ..history.clone()
-        };
-        let seed = build_seed(&previous, b"", &cfg, b"", 2005).unwrap();
+        let (cfg, history) = test_support::evaluation_fixture();
+        let Preseason { seed, games, .. } = preseason(&history, &cfg, 2005).unwrap();
         let mut ratings: BTreeMap<_, _> = seed.ratings.iter().map(|r| (r.team.clone(), r.elo)).collect();
-        let mut season: Vec<_> = history.games.iter().filter(|g| g.season == 2005).cloned().collect();
-        season.sort_by(|a, b| a.start_time_utc.cmp(&b.start_time_utc).then(a.id.cmp(&b.id)));
-        update_elo(&mut ratings, &season, &cfg.elo).unwrap();
+        for g in &games {
+            apply_game(&mut ratings, g, &cfg.elo).unwrap();
+        }
         for r in replay_elo(&history.games, &cfg, 2005).unwrap().ratings {
             assert!((ratings[&r.team] - r.elo).abs() < 1e-9, "{}", r.team);
         }
@@ -657,7 +571,7 @@ mod tests {
 
     #[test]
     fn same_utc_day_results_never_reach_either_method_but_earlier_days_do() {
-        let (cfg, mut history) = crate::fixtures::fixture();
+        let (cfg, mut history) = test_support::evaluation_fixture();
         let (_, before) = predict_season(&history, &cfg, 2005).unwrap();
         // The fixture's first two 2005 games are a same-day doubleheader; the third is a week later.
         let first = history.games.iter_mut().find(|g| g.id == "2005-1").unwrap();
@@ -679,7 +593,7 @@ mod tests {
 
     #[test]
     fn elo_probabilities_keep_elo_odds_and_drop_ties_where_forbidden() {
-        let (cfg, history) = crate::fixtures::fixture();
+        let (cfg, history) = test_support::evaluation_fixture();
         let (tie_weight, rows) = predict_season(&history, &cfg, 2005).unwrap();
         assert!(tie_weight > 0.0);
         for (row, game) in rows.iter().zip(history.games.iter().filter(|g| g.season == 2005)) {

@@ -3,21 +3,24 @@ use chrono::{DateTime, Datelike, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
+    cmp::Ordering,
     collections::{BTreeMap, BTreeSet},
     fmt::Write as _,
     fs::{self, File, OpenOptions},
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     time::Duration,
 };
 
 pub mod adapters;
 pub mod bayesian;
 mod elo;
+pub mod scoring;
 mod time;
 pub mod tuning;
+pub mod walk_forward;
 pub use adapters::{SourceAdapter, adapter_for};
-pub use elo::{EloReplay, expected_home, regress_rating, replay_elo};
+pub use elo::{EloReplay, apply_game, expected_home, regress_rating, replay_elo};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Source {
@@ -148,6 +151,19 @@ pub enum Outcome {
     AwayWin,
     Tie,
 }
+
+impl Outcome {
+    pub const ALL: [Outcome; 3] = [Outcome::HomeWin, Outcome::AwayWin, Outcome::Tie];
+
+    /// Fractional home score: win 1, tie 1/2, loss 0.
+    pub fn home_score(&self) -> f64 {
+        match self {
+            Outcome::HomeWin => 1.0,
+            Outcome::AwayWin => 0.0,
+            Outcome::Tie => 0.5,
+        }
+    }
+}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Game {
     pub id: String,
@@ -243,6 +259,14 @@ pub fn load_league_config(config_dir: &Path, league: &str) -> Result<(LeagueConf
         config.id
     );
     Ok((config, bytes))
+}
+
+/// Load `<data_dir>/<league>/history.json`, returning the parsed file and its bytes.
+pub fn load_history(data_dir: &Path, cfg: &LeagueConfig) -> Result<(GameFile, Vec<u8>)> {
+    let bytes = fs::read(data_dir.join(&cfg.id).join("history.json")).context("Read history.json; run history-importer first")?;
+    let history = serde_json::from_slice(&bytes)
+        .context("Parse history.json; start_time_utc, numeric round, and round_label are required; rerun history-importer")?;
+    Ok((history, bytes))
 }
 
 const DAYS_IN_MONTH: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -536,8 +560,13 @@ pub fn validate_games(games: &mut [Game], cfg: &LeagueConfig) -> Result<()> {
             g.id
         );
     }
-    games.sort_by(|a, b| (a.season, a.start_time_utc, &a.id).cmp(&(b.season, b.start_time_utc, &b.id)));
+    games.sort_by(chronological);
     Ok(())
+}
+
+/// Replay order: season, then start time, then id.
+pub(crate) fn chronological(a: &Game, b: &Game) -> Ordering {
+    (a.season, a.start_time_utc, &a.id).cmp(&(b.season, b.start_time_utc, &b.id))
 }
 
 pub fn fetch_source(url: &str) -> Result<String> {
@@ -580,6 +609,14 @@ pub fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     Ok(())
 }
 
+/// Save a tool report as `<dir>/<name>-<league>-<UTC date of run_at>.json` and return its path.
+pub fn save_report<T: Serialize>(dir: &Path, name: &str, league: &str, run_at: &str, report: &T) -> Result<PathBuf> {
+    let date = DateTime::parse_from_rfc3339(run_at)?.with_timezone(&Utc).format("%Y-%m-%d");
+    let path = dir.join(format!("{name}-{league}-{date}.json"));
+    write_json(&path, report).with_context(|| format!("Write report {}", path.display()))?;
+    Ok(path)
+}
+
 /// Advisory lock is released by the OS even if the process crashes.
 pub fn lock(path: &Path) -> Result<File> {
     fs::create_dir_all(path.parent().context("Lock needs a parent directory")?)?;
@@ -600,6 +637,17 @@ pub fn build_seed(
     config_bytes: &[u8],
     target: i32,
 ) -> Result<EloSeed> {
+    seed_with_ties(history, history_bytes, cfg, config_bytes, target).map(|(seed, _)| seed)
+}
+
+/// `build_seed`, also returning the tie history that set the seed's tie weight.
+pub(crate) fn seed_with_ties(
+    history: &GameFile,
+    history_bytes: &[u8],
+    cfg: &LeagueConfig,
+    config_bytes: &[u8],
+    target: i32,
+) -> Result<(EloSeed, bayesian::TieHistory)> {
     cfg.validate()?;
     ensure!(
         history.teams == cfg.teams,
@@ -628,7 +676,7 @@ pub fn build_seed(
     for r in &mut ratings {
         r.elo = regress_rating(r.elo, &cfg.elo);
     }
-    Ok(EloSeed {
+    let seed = EloSeed {
         schema_version: 1,
         league: cfg.id.clone(),
         target_season: target,
@@ -642,7 +690,8 @@ pub fn build_seed(
         tie_weight: ties.estimate(&cfg.bayesian),
         ratings,
         audit,
-    })
+    };
+    Ok((seed, ties))
 }
 
 #[cfg(test)]

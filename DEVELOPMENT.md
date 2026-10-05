@@ -40,8 +40,9 @@ Dependency install-script permissions and release-age exceptions are in
 | `apps/web/src/` | Browser app: league registry (`leagues.ts`) and league selection (`selection.ts`), contracts, source adapters and their registry (`adapters/`), Bayesian model, service and refresh worker, IndexedDB persistence (`persistence.ts`), small-key localStorage (`small-store.ts`), React interface |
 | `apps/web/test/` | Vitest tests: model, adapters and parity fixtures, league selection and switching, storage, startup/cache, identity |
 | `apps/web/scripts/` | Node backtest |
-| `crates/rating-core/` | Shared Rust library: data contracts, league configuration, source adapters and their registry (`src/adapters/`), file IO, Elo replay, Bayesian model, tuning validation |
+| `crates/rating-core/` | Shared Rust library: data contracts, league configuration, source adapters and their registry (`src/adapters/`), file IO, Elo replay, Bayesian model, tuning validation and parameter search, season-by-season prediction, forecast scores |
 | `crates/rating-core/tests/fixtures/` | Rust/TypeScript parity fixtures: `bayesian-parity.json` (Bayesian fit) and `mlb-statsapi.json` (MLB adapter) |
+| `crates/test-support/` | Rust test helpers shared by every crate's tests: league configs, history fixtures, and command-line checks the tools have in common |
 | `config/` | League configurations: `nfl.json`, `mlb.json` |
 | `docs/` | Statistical model, extension guide, franchise history, branding |
 

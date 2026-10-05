@@ -1,17 +1,16 @@
 use rating_core::{
-    GameFile, HISTORY_SCHEMA_VERSION, LeagueConfig, adapter_for, parse_documents, parse_source,
+    LeagueConfig, adapter_for, parse_documents, parse_source,
     tuning::{self, Split},
 };
+use test_support::{NFLVERSE_HEADER, history_file, league_config};
 
 fn nflverse() -> LeagueConfig {
-    serde_json::from_str(include_str!("../../../config/nfl.json")).unwrap()
+    league_config("nfl")
 }
-
-const HEADER: &str = "game_id,season,game_type,week,gameday,gametime,away_team,away_score,home_team,home_score,location\n";
 
 fn csv() -> String {
     format!(
-        "{HEADER}a,2002,REG,1,2002-09-08,13:00,SF,10,SEA,20,Home\n\
+        "{NFLVERSE_HEADER}a,2002,REG,1,2002-09-08,13:00,SF,10,SEA,20,Home\n\
          sb,2002,SB,21,2003-01-26,18:25,OAK,21,TB,48,Neutral\n\
          b,2003,REG,1,2003-09-07,13:00,SF,17,SEA,24,Home\n\
          sb2,2003,SB,21,2004-02-01,18:25,CAR,,NE,,Neutral\n"
@@ -101,15 +100,12 @@ fn tuning_requires_a_completed_super_bowl_per_season() {
             )
         })
         .collect();
-    let history = |csv: &str| GameFile {
-        schema_version: HISTORY_SCHEMA_VERSION,
-        league: "nfl".into(),
-        fetched_at: "2024-03-01T00:00:00Z".into(),
-        source_url: cfg.source.url.clone(),
-        from_season: 2020,
-        through_season: 2023,
-        teams: cfg.teams.clone(),
-        games: parse_source(&format!("{HEADER}{csv}"), &cfg).unwrap(),
+    let history = |csv: &str| {
+        history_file(
+            &cfg,
+            2020..=2023,
+            parse_source(&format!("{NFLVERSE_HEADER}{csv}"), &cfg).unwrap(),
+        )
     };
     let split = Split {
         warmup_start: 2020,

@@ -118,7 +118,7 @@ dependencies = [
  "rating-core",
  "serde",
  "serde_json",
- "tempfile",
+ "test-support",
 ]
 
 [[package]]
@@ -368,7 +368,7 @@ dependencies = [
  "anyhow",
  "clap",
  "rating-core",
- "serde_json",
+ "test-support",
 ]
 
 [[package]]
@@ -381,7 +381,7 @@ dependencies = [
  "rating-core",
  "serde",
  "serde_json",
- "tempfile",
+ "test-support",
 ]
 
 [[package]]
@@ -404,7 +404,7 @@ dependencies = [
  "rating-core",
  "serde",
  "serde_json",
- "tempfile",
+ "test-support",
 ]
 
 [[package]]
@@ -536,6 +536,7 @@ dependencies = [
  "rating-core",
  "serde_json",
  "tempfile",
+ "test-support",
 ]
 
 [[package]]
@@ -1101,6 +1102,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+ "test-support",
 ]
 
 [[package]]
@@ -1491,6 +1493,17 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "test-support"
+version = "1.4.1"
+dependencies = [
+ "chrono",
+ "rating-core",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

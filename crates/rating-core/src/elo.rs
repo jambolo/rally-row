@@ -1,5 +1,5 @@
-use crate::{Audit, EloSettings, Game, LeagueConfig, Outcome, Rating, validate_games};
-use anyhow::{Result, ensure};
+use crate::{Audit, EloSettings, Game, LeagueConfig, Rating, validate_games};
+use anyhow::{Context, Result, ensure};
 use std::collections::BTreeMap;
 
 pub struct EloReplay {
@@ -13,6 +13,28 @@ pub fn expected_home(home: f64, away: f64, neutral: bool, cfg: &EloSettings) -> 
 
 pub fn regress_rating(rating: f64, cfg: &EloSettings) -> f64 {
     cfg.initial + (rating - cfg.initial) * (1.0 - cfg.offseason_regression)
+}
+
+/// Scores a completed game with the pregame ratings, then moves both ratings by K times the observed surprise.
+pub fn apply_game(ratings: &mut BTreeMap<String, f64>, game: &Game, cfg: &EloSettings) -> Result<Audit> {
+    let outcome = game.result.as_ref().context("Cannot score an unreported game")?;
+    let home = ratings[&game.home_team];
+    let away = ratings[&game.away_team];
+    let expected = expected_home(home, away, game.neutral, cfg);
+    let observed = outcome.home_score();
+    let delta = cfg.k * (observed - expected);
+    ratings.insert(game.home_team.clone(), home + delta);
+    ratings.insert(game.away_team.clone(), away - delta);
+    Ok(Audit {
+        game_id: game.id.clone(),
+        season: game.season,
+        home_before: home,
+        away_before: away,
+        expected_home_score: expected,
+        observed_home_score: observed,
+        home_after: home + delta,
+        away_after: away - delta,
+    })
 }
 
 /// Replay through the end of a season; callers explicitly regress again for next-season priors.
@@ -45,29 +67,9 @@ pub fn replay_elo(games: &[Game], cfg: &LeagueConfig, through_season: i32) -> Re
             }
             previous += 1;
         }
-        let home = ratings[&g.home_team];
-        let away = ratings[&g.away_team];
-        let expected = expected_home(home, away, g.neutral, &cfg.elo);
-        let observed = match g.result.as_ref().unwrap() {
-            Outcome::HomeWin => 1.0,
-            Outcome::AwayWin => 0.0,
-            Outcome::Tie => 0.5,
-        };
-        let delta = cfg.elo.k * (observed - expected);
-        ratings.insert(g.home_team.clone(), home + delta);
-        ratings.insert(g.away_team.clone(), away - delta);
+        audit.push(apply_game(&mut ratings, g, &cfg.elo)?);
         *counts.get_mut(&g.home_team).unwrap() += 1;
         *counts.get_mut(&g.away_team).unwrap() += 1;
-        audit.push(Audit {
-            game_id: g.id.clone(),
-            season: g.season,
-            home_before: home,
-            away_before: away,
-            expected_home_score: expected,
-            observed_home_score: observed,
-            home_after: home + delta,
-            away_after: away - delta,
-        });
     }
     Ok(EloReplay {
         ratings: ratings

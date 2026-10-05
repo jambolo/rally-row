@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use rating_core::{
-    BayesianGrid, BayesianSettings, EloSeed, EloSettings, Game, GameFile, LeagueConfig, Outcome,
-    bayesian::{Probabilities, TieHistory, fit_posterior},
-    build_seed,
-    tuning::{Split, validate},
+    BayesianGrid, BayesianSettings, EloSettings, GameFile, LeagueConfig, Outcome,
+    bayesian::Probabilities,
+    scoring::{self, CalibrationBin, calibration, standard_error},
+    tuning::{Ranges, SearchParameters, Split, add_candidates, boundary_note, grid_candidates, select, validate},
+    walk_forward::{Preseason, posteriors_by_utc_date, preseason},
 };
 use serde::Serialize;
 
@@ -29,6 +30,23 @@ impl Parameters {
             tie_prior_rate: self.tie_prior_rate,
         }
     }
+}
+
+impl SearchParameters for Parameters {
+    const NAMES: [&'static str; 3] = ["prior_sd_elo", "tie_prior_games", "tie_prior_rate"];
+
+    fn from_values([prior_sd_elo, tie_prior_games, tie_prior_rate]: [f64; 3]) -> Self {
+        Self {
+            prior_sd_elo,
+            tie_prior_games,
+            tie_prior_rate,
+        }
+    }
+
+    fn values(self) -> [f64; 3] {
+        [self.prior_sd_elo, self.tie_prior_games, self.tie_prior_rate]
+    }
+
     fn distance(self, baseline: Self) -> f64 {
         (self.prior_sd_elo / baseline.prior_sd_elo).ln().powi(2)
             + (self.tie_prior_games / baseline.tie_prior_games).ln().powi(2)
@@ -66,19 +84,7 @@ impl Grid {
         }
     }
     fn candidates(&self) -> Vec<Parameters> {
-        let mut result = Vec::new();
-        for &prior_sd_elo in &self.prior_sd_elo {
-            for &tie_prior_games in &self.tie_prior_games {
-                for &tie_prior_rate in &self.tie_prior_rate {
-                    result.push(Parameters {
-                        prior_sd_elo,
-                        tie_prior_games,
-                        tie_prior_rate,
-                    });
-                }
-            }
-        }
-        result
+        grid_candidates([&self.prior_sd_elo, &self.tie_prior_games, &self.tie_prior_rate])
     }
     fn around(center: Parameters) -> Self {
         let neighbors = |v: f64| vec![v / std::f64::consts::SQRT_2, v, v * std::f64::consts::SQRT_2];
@@ -91,29 +97,16 @@ impl Grid {
 }
 
 struct PreparedSeason {
-    seed: EloSeed,
-    games: Vec<Game>,
-    ties: TieHistory,
+    preseason: Preseason,
+    /// Tie weights already estimated, keyed by `(tie_prior_games, tie_prior_rate)`.
     tie_weights: Vec<(f64, f64, f64)>,
 }
 
 fn prepare(history: &GameFile, cfg: &LeagueConfig, start: i32, end: i32) -> Result<Vec<PreparedSeason>> {
     (start..=end)
         .map(|season| {
-            let previous = GameFile {
-                through_season: season - 1,
-                games: history.games.iter().filter(|g| g.season < season).cloned().collect(),
-                ..history.clone()
-            };
-            let mut seed = build_seed(&previous, b"", cfg, b"", season)?;
-            let ties = TieHistory::from_audit(&seed.audit, &previous.games, cfg)?;
-            seed.audit.clear();
-            let mut games: Vec<_> = history.games.iter().filter(|g| g.season == season).cloned().collect();
-            games.sort_by(|a, b| a.start_time_utc.cmp(&b.start_time_utc).then(a.id.cmp(&b.id)));
             Ok(PreparedSeason {
-                seed,
-                games,
-                ties,
+                preseason: preseason(history, cfg, season)?,
                 tie_weights: Vec::new(),
             })
         })
@@ -131,30 +124,23 @@ fn predict_season(season: &mut PreparedSeason, cfg: &LeagueConfig) -> Result<Vec
         .tie_weights
         .iter()
         .find(|(games, rate, _)| *games == b.tie_prior_games && *rate == b.tie_prior_rate);
-    season.seed.tie_weight = if let Some(&(_, _, weight)) = weight {
+    season.preseason.seed.tie_weight = if let Some(&(_, _, weight)) = weight {
         weight
     } else {
-        let weight = season.ties.estimate(b);
+        let weight = season.preseason.ties.estimate(b);
         season.tie_weights.push((b.tie_prior_games, b.tie_prior_rate, weight));
         weight
     };
-    let mut predictions = Vec::with_capacity(season.games.len());
-    let mut start = 0;
-    while start < season.games.len() {
-        let date = season.games[start].start_time_utc.date_naive();
-        let mut end = start + 1;
-        while end < season.games.len() && season.games[end].start_time_utc.date_naive() == date {
-            end += 1;
-        }
-        let model = fit_posterior(&season.seed, &season.games[..start], cfg)
-            .with_context(|| format!("Fit season {} before {date}", season.seed.target_season))?;
-        for g in &season.games[start..end] {
+    let Preseason { seed, games, .. } = &season.preseason;
+    let mut predictions = Vec::with_capacity(games.len());
+    for fit in posteriors_by_utc_date(seed, games, cfg) {
+        let (model, date_games) = fit?;
+        for g in date_games {
             predictions.push(PredictionRow {
                 probabilities: model.predict(&g.home_team, &g.away_team, g.neutral, &g.phase)?,
                 outcome: g.result.clone().context("Cannot score an unreported game")?,
             });
         }
-        start = end;
     }
     Ok(predictions)
 }
@@ -177,10 +163,8 @@ fn score(rows: &[PredictionRow]) -> Option<Score> {
     let mut expected_ties = 0.0;
     let mut observed_ties = 0;
     for row in rows {
-        log_loss -= row.probabilities.for_outcome(&row.outcome).max(1e-15).ln();
-        for outcome in [Outcome::HomeWin, Outcome::AwayWin, Outcome::Tie] {
-            brier += (row.probabilities.for_outcome(&outcome) - f64::from(row.outcome == outcome)).powi(2);
-        }
+        log_loss += scoring::log_loss(row.probabilities, &row.outcome);
+        brier += scoring::brier(row.probabilities, &row.outcome);
         expected_ties += row.probabilities.tie;
         observed_ties += usize::from(row.outcome == Outcome::Tie);
     }
@@ -203,16 +187,6 @@ pub struct SeasonScore {
 }
 
 #[derive(Clone, Serialize)]
-pub struct CalibrationBin {
-    outcome: Outcome,
-    lower: f64,
-    upper: f64,
-    games: usize,
-    mean_probability: f64,
-    observed_rate: f64,
-}
-
-#[derive(Clone, Serialize)]
 pub struct Evaluation {
     games: usize,
     mean_season_log_loss: f64,
@@ -231,34 +205,13 @@ fn evaluate(prepared: &mut [PreparedSeason], cfg: &LeagueConfig, parameters: Par
         let predictions = predict_season(season, &cfg)?;
         let midpoint = predictions.len() / 2;
         seasons.push(SeasonScore {
-            season: season.seed.target_season,
-            tie_weight: season.seed.tie_weight,
+            season: season.preseason.seed.target_season,
+            tie_weight: season.preseason.seed.tie_weight,
             overall: score(&predictions).context("Empty evaluation season")?,
             first_half: score(&predictions[..midpoint]),
             second_half: score(&predictions[midpoint..]),
         });
         rows.extend(predictions);
-    }
-    let mut calibration = Vec::new();
-    for outcome in [Outcome::HomeWin, Outcome::AwayWin, Outcome::Tie] {
-        let mut bins = [(0_usize, 0.0, 0_usize); 10];
-        for row in &rows {
-            let p = row.probabilities.for_outcome(&outcome);
-            let bin = &mut bins[((p * 10.0) as usize).min(9)];
-            bin.0 += 1;
-            bin.1 += p;
-            bin.2 += usize::from(row.outcome == outcome);
-        }
-        for (i, (games, total, observed)) in bins.into_iter().enumerate().filter(|(_, b)| b.0 > 0) {
-            calibration.push(CalibrationBin {
-                outcome: outcome.clone(),
-                lower: i as f64 / 10.0,
-                upper: (i + 1) as f64 / 10.0,
-                games,
-                mean_probability: total / games as f64,
-                observed_rate: observed as f64 / games as f64,
-            });
-        }
     }
     Ok(Evaluation {
         games: rows.len(),
@@ -266,80 +219,16 @@ fn evaluate(prepared: &mut [PreparedSeason], cfg: &LeagueConfig, parameters: Par
         mean_season_brier: seasons.iter().map(|s| s.overall.brier).sum::<f64>() / seasons.len() as f64,
         pooled: score(&rows).context("Empty evaluation")?,
         seasons,
-        calibration,
+        calibration: calibration(&rows, |row| (row.probabilities, &row.outcome)),
     })
 }
 
-fn standard_error(values: &[f64]) -> Option<f64> {
-    (values.len() >= 2).then(|| {
-        let n = values.len() as f64;
-        let mean = values.iter().sum::<f64>() / n;
-        (values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0) / n).sqrt()
-    })
+fn mean_season_log_loss(evaluation: &Evaluation) -> f64 {
+    evaluation.mean_season_log_loss
 }
 
-fn differences(baseline: &Evaluation, selected: &Evaluation) -> Vec<f64> {
-    baseline
-        .seasons
-        .iter()
-        .zip(&selected.seasons)
-        .map(|(a, b)| a.overall.log_loss - b.overall.log_loss)
-        .collect()
-}
-
-struct Candidate {
-    parameters: Parameters,
-    evaluation: Evaluation,
-}
-
-fn add_candidates(
-    candidates: &mut Vec<Candidate>,
-    parameters: Vec<Parameters>,
-    prepared: &mut [PreparedSeason],
-    cfg: &LeagueConfig,
-) -> Result<()> {
-    for parameters in parameters {
-        if candidates.iter().any(|c| c.parameters == parameters) {
-            continue;
-        }
-        let evaluation = evaluate(prepared, cfg, parameters).with_context(|| format!("Evaluate {parameters:?}"))?;
-        candidates.push(Candidate { parameters, evaluation });
-        if candidates.len().is_multiple_of(10) {
-            eprintln!("Evaluated {} Bayesian candidates...", candidates.len());
-        }
-    }
-    candidates.sort_by(|a, b| {
-        a.evaluation
-            .mean_season_log_loss
-            .total_cmp(&b.evaluation.mean_season_log_loss)
-    });
-    Ok(())
-}
-
-fn select(candidates: &[Candidate], baseline: Parameters) -> (&Candidate, usize) {
-    let best = &candidates[0];
-    let eligible: Vec<_> = candidates
-        .iter()
-        .filter(|c| {
-            c.evaluation.mean_season_log_loss - best.evaluation.mean_season_log_loss
-                <= standard_error(&differences(&c.evaluation, &best.evaluation)).unwrap_or(0.0) + 1e-12
-        })
-        .collect();
-    let selected = eligible
-        .iter()
-        .copied()
-        .min_by(|a, b| {
-            a.parameters
-                .distance(baseline)
-                .total_cmp(&b.parameters.distance(baseline))
-                .then(
-                    a.evaluation
-                        .mean_season_log_loss
-                        .total_cmp(&b.evaluation.mean_season_log_loss),
-                )
-        })
-        .unwrap();
-    (selected, eligible.len())
+fn season_log_loss(evaluation: &Evaluation) -> Vec<f64> {
+    evaluation.seasons.iter().map(|s| s.overall.log_loss).collect()
 }
 
 #[derive(Serialize)]
@@ -358,7 +247,11 @@ pub struct Comparison {
 }
 
 fn compare(baseline: Evaluation, selected: Evaluation) -> Comparison {
-    let delta = differences(&baseline, &selected);
+    let delta: Vec<_> = season_log_loss(&baseline)
+        .iter()
+        .zip(season_log_loss(&selected))
+        .map(|(a, b)| a - b)
+        .collect();
     Comparison {
         mean_season_log_loss_improvement: baseline.mean_season_log_loss - selected.mean_season_log_loss,
         paired_season_standard_error: standard_error(&delta),
@@ -374,51 +267,6 @@ fn compare(baseline: Evaluation, selected: Evaluation) -> Comparison {
         baseline,
         selected,
     }
-}
-
-/// Inclusive `[min, max]` of each parameter over every evaluated candidate.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
-pub struct Ranges {
-    prior_sd_elo: [f64; 2],
-    tie_prior_games: [f64; 2],
-    tie_prior_rate: [f64; 2],
-}
-
-impl Ranges {
-    fn of(evaluated: &[Parameters]) -> Self {
-        let range = |value: fn(&Parameters) -> f64| {
-            evaluated
-                .iter()
-                .map(value)
-                .fold([f64::INFINITY, f64::NEG_INFINITY], |[lo, hi], v| [lo.min(v), hi.max(v)])
-        };
-        Self {
-            prior_sd_elo: range(|p| p.prior_sd_elo),
-            tie_prior_games: range(|p| p.tie_prior_games),
-            tie_prior_rate: range(|p| p.tie_prior_rate),
-        }
-    }
-    /// Parameter names, in report key order, whose selected value equals its evaluated minimum or maximum.
-    fn boundary(&self, selected: Parameters) -> Vec<&'static str> {
-        [
-            ("prior_sd_elo", selected.prior_sd_elo, self.prior_sd_elo),
-            ("tie_prior_games", selected.tie_prior_games, self.tie_prior_games),
-            ("tie_prior_rate", selected.tie_prior_rate, self.tie_prior_rate),
-        ]
-        .into_iter()
-        .filter(|&(_, value, [lo, hi])| value == lo || value == hi)
-        .map(|(name, _, _)| name)
-        .collect()
-    }
-}
-
-fn boundary_note(names: &[&str]) -> Option<String> {
-    (!names.is_empty()).then(|| {
-        format!(
-            "Selected parameters lie on a searched boundary ({}); extend tuning_grids in the league configuration and rerun before adopting.",
-            names.join(", ")
-        )
-    })
 }
 
 #[derive(Serialize)]
@@ -471,14 +319,33 @@ pub fn run(history: &GameFile, cfg: &LeagueConfig, split: Split, config_sha256: 
     let mut prepared = prepare(history, cfg, split.tune_start, split.tune_end)?;
     let (coarse_grid, grid_source) = Grid::starting(cfg.tuning_grids.as_ref().and_then(|g| g.bayesian.as_ref()));
     let mut candidates = Vec::new();
-    add_candidates(&mut candidates, vec![baseline], &mut prepared, cfg)?;
-    add_candidates(&mut candidates, coarse_grid.candidates(), &mut prepared, cfg)?;
+    let mut evaluated = 0_usize;
+    let mut evaluate_tuning = |parameters: Parameters| {
+        let evaluation = evaluate(&mut prepared, cfg, parameters).with_context(|| format!("Evaluate {parameters:?}"))?;
+        evaluated += 1;
+        if evaluated.is_multiple_of(10) {
+            eprintln!("Evaluated {evaluated} Bayesian candidates...");
+        }
+        Ok(evaluation)
+    };
+    add_candidates(&mut candidates, [baseline], &mut evaluate_tuning, mean_season_log_loss)?;
+    add_candidates(
+        &mut candidates,
+        coarse_grid.candidates(),
+        &mut evaluate_tuning,
+        mean_season_log_loss,
+    )?;
     let centers: Vec<_> = candidates.iter().take(3).map(|c| c.parameters).collect();
     for &center in &centers {
-        add_candidates(&mut candidates, Grid::around(center).candidates(), &mut prepared, cfg)?;
+        add_candidates(
+            &mut candidates,
+            Grid::around(center).candidates(),
+            &mut evaluate_tuning,
+            mean_season_log_loss,
+        )?;
     }
-    let (selected, near_best_candidates) = select(&candidates, baseline);
-    let evaluated_ranges = Ranges::of(&candidates.iter().map(|c| c.parameters).collect::<Vec<_>>());
+    let (selected, near_best_candidates) = select(&candidates, baseline, mean_season_log_loss, season_log_loss);
+    let evaluated_ranges = Ranges::of(candidates.iter().map(|c| c.parameters));
     let selected_on_boundary = evaluated_ranges.boundary(selected.parameters);
     let baseline_tuning = &candidates.iter().find(|c| c.parameters == baseline).unwrap().evaluation;
     eprintln!(
@@ -549,6 +416,7 @@ pub fn run(history: &GameFile, cfg: &LeagueConfig, split: Split, config_sha256: 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rating_core::tuning::Candidate;
 
     #[test]
     fn scores_all_three_outcomes_and_weights_seasons_equally() {
@@ -565,7 +433,7 @@ mod tests {
         assert!((s.brier - 0.98).abs() < 1e-12);
         assert_eq!(s.expected_ties, 0.2);
         assert_eq!(s.observed_ties, 1);
-        let (cfg, mut history) = crate::fixtures::fixture();
+        let (cfg, mut history) = test_support::tuning_fixture();
         history.games.retain(|g| g.season != 2004 || g.round != 2);
         let mut prepared = prepare(&history, &cfg, 2003, 2004).unwrap();
         let result = evaluate(&mut prepared, &cfg, Parameters::from_settings(&cfg.bayesian)).unwrap();
@@ -587,17 +455,17 @@ mod tests {
 
     #[test]
     fn same_utc_day_and_future_results_cannot_leak_into_predictions_or_preseason_tie_weight() {
-        let (cfg, mut history) = crate::fixtures::fixture();
+        let (cfg, mut history) = test_support::tuning_fixture();
         let mut games = history.games.iter_mut().filter(|g| g.season == 2003);
         games.next().unwrap().start_time_utc = "2003-09-07T23:30:00-04:00".parse().unwrap();
         games.next().unwrap().start_time_utc = "2003-09-08T22:00:00Z".parse().unwrap();
         let mut prepared = prepare(&history, &cfg, 2003, 2003).unwrap();
         let before = predict_season(&mut prepared[0], &cfg).unwrap();
-        let tie_weight = prepared[0].seed.tie_weight;
-        prepared[0].games[0].result = Some(Outcome::AwayWin);
-        prepared[0].games[1].result = Some(Outcome::HomeWin);
+        let tie_weight = prepared[0].preseason.seed.tie_weight;
+        prepared[0].preseason.games[0].result = Some(Outcome::AwayWin);
+        prepared[0].preseason.games[1].result = Some(Outcome::HomeWin);
         let after = predict_season(&mut prepared[0], &cfg).unwrap();
-        assert_eq!(prepared[0].seed.tie_weight, tie_weight);
+        assert_eq!(prepared[0].preseason.seed.tie_weight, tie_weight);
         for i in 0..2 {
             assert_eq!(before[i].probabilities.home_win, after[i].probabilities.home_win);
             assert_eq!(before[i].probabilities.tie, after[i].probabilities.tie);
@@ -608,16 +476,16 @@ mod tests {
             g.result = Some(Outcome::AwayWin);
         }
         let changed = prepare(&history, &cfg, 2003, 2003).unwrap();
-        assert_eq!(changed[0].seed.tie_weight, tie_weight);
+        assert_eq!(changed[0].preseason.seed.tie_weight, tie_weight);
         assert_eq!(
-            serde_json::to_value(&changed[0].seed.ratings).unwrap(),
-            serde_json::to_value(&prepared[0].seed.ratings).unwrap()
+            serde_json::to_value(&changed[0].preseason.seed.ratings).unwrap(),
+            serde_json::to_value(&prepared[0].preseason.seed.ratings).unwrap()
         );
     }
 
     #[test]
     fn selection_keeps_defaults_in_a_flat_region_and_moves_for_consistent_improvement() {
-        let (cfg, history) = crate::fixtures::fixture();
+        let (cfg, history) = test_support::tuning_fixture();
         let baseline = Parameters::from_settings(&cfg.bayesian);
         let mut prepared = prepare(&history, &cfg, 2003, 2004).unwrap();
         let mut best = evaluate(&mut prepared, &cfg, baseline).unwrap();
@@ -641,11 +509,16 @@ mod tests {
                 evaluation: near,
             },
         ];
-        assert_eq!(select(&candidates, baseline).0.parameters, baseline);
+        let selected = |candidates: &[Candidate<Parameters, Evaluation>]| {
+            select(candidates, baseline, mean_season_log_loss, season_log_loss)
+                .0
+                .parameters
+        };
+        assert_eq!(selected(&candidates), baseline);
         for s in &mut candidates[1].evaluation.seasons {
             s.overall.log_loss = 0.55;
         }
-        assert_eq!(select(&candidates, baseline).0.parameters.prior_sd_elo, 100.0);
+        assert_eq!(selected(&candidates).prior_sd_elo, 100.0);
         assert_eq!(Grid::coarse().candidates().len(), 120);
         assert!(Grid::coarse().candidates().contains(&baseline));
     }
@@ -672,28 +545,18 @@ mod tests {
     }
 
     #[test]
-    fn boundary_detection_flags_minimum_and_maximum_and_ignores_interior_values() {
-        let p = |prior_sd_elo, tie_prior_games, tie_prior_rate| Parameters {
-            prior_sd_elo,
-            tie_prior_games,
-            tie_prior_rate,
+    fn search_names_and_values_follow_the_serialized_parameters() {
+        let p = Parameters {
+            prior_sd_elo: 150.0,
+            tie_prior_games: 100.0,
+            tie_prior_rate: 0.005,
         };
-        let ranges = Ranges::of(&[p(100.0, 30.0, 0.005), p(50.0, 100.0, 0.001), p(200.0, 10.0, 0.01)]);
-        assert_eq!(
-            ranges,
-            Ranges {
-                prior_sd_elo: [50.0, 200.0],
-                tie_prior_games: [10.0, 100.0],
-                tie_prior_rate: [0.001, 0.01],
-            }
-        );
-        assert!(ranges.boundary(p(100.0, 30.0, 0.005)).is_empty());
-        assert_eq!(ranges.boundary(p(50.0, 30.0, 0.01)), ["prior_sd_elo", "tie_prior_rate"]);
-        assert_eq!(ranges.boundary(p(100.0, 10.0, 0.001)), ["tie_prior_games", "tie_prior_rate"]);
-        assert_eq!(boundary_note(&[]), None);
-        assert_eq!(
-            boundary_note(&["tie_prior_games"]).unwrap(),
-            "Selected parameters lie on a searched boundary (tie_prior_games); extend tuning_grids in the league configuration and rerun before adopting."
-        );
+        let fields: Vec<_> = Parameters::NAMES
+            .iter()
+            .zip(p.values())
+            .map(|(name, value)| format!("\"{name}\":{value:?}"))
+            .collect();
+        assert_eq!(serde_json::to_string(&p).unwrap(), format!("{{{}}}", fields.join(",")));
+        assert_eq!(Parameters::from_values(p.values()), p);
     }
 }

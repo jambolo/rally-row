@@ -43,7 +43,9 @@ Rust and Prettier both use a 132-column line width.
 ### Offline data pipeline (Rust)
 
 `crates/rating-core` is the shared library: config and data contracts (serde structs in `lib.rs`), source
-adapters, Elo replay, the Bayesian model, and tuning validation. The binaries in `apps/` are thin CLIs over it.
+adapters, Elo replay, the Bayesian model, tuning validation and the tuners' search and selection rule (`tuning.rs`),
+season-by-season prediction from earlier UTC dates (`walk_forward.rs`), and forecast scores (`scoring.rs`). The
+binaries in `apps/` are thin CLIs over it, so logic two tools share belongs in the library.
 
 1. `history-importer --league <id>` downloads the provider's history through the league's source adapter and
    writes `data/<id>/history.json`. It replaces the file only if every season is complete, so a failure leaves the

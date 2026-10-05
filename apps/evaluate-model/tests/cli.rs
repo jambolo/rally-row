@@ -1,17 +1,17 @@
-use rating_core::{EloTuneSettings, Outcome};
-use serde_json::Value;
-use std::{fs, path::Path, process::Command};
+use rating_core::{EloTuneSettings, LeagueConfig, Outcome};
+use serde_json::{Value, json};
+use test_support::{
+    cli::{
+        ToolDir, assert_contains, assert_read_only_and_repeatable, assert_rejects_unusable_history, assert_requires_league,
+        assert_split_flags_override_config, without_run_at,
+    },
+    evaluation_fixture,
+};
 
-mod common;
-use common::fixture;
+const BIN: &str = env!("CARGO_BIN_EXE_evaluate-model");
 
-fn invoke(root: &Path, extra: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_evaluate-model"))
-        .current_dir(root)
-        .args(["--league", "nfl", "--config-dir", ".", "--data-dir", "data"])
-        .args(extra)
-        .output()
-        .unwrap()
+fn tool() -> ToolDir {
+    ToolDir::new(BIN, &["--json"])
 }
 
 fn overlap_noted(report: &Value) -> bool {
@@ -24,34 +24,16 @@ fn overlap_noted(report: &Value) -> bool {
 
 #[test]
 fn cli_is_read_only_repeatable_and_scores_both_methods_on_heldout_seasons() {
-    let dir = tempfile::tempdir().unwrap();
-    let (cfg, mut history) = fixture();
-    let config_bytes = serde_json::to_vec(&cfg).unwrap();
-    let history_bytes = serde_json::to_vec(&history).unwrap();
-    fs::create_dir_all(dir.path().join("data/nfl")).unwrap();
-    fs::write(dir.path().join("nfl.json"), &config_bytes).unwrap();
-    fs::write(dir.path().join("data/nfl/history.json"), &history_bytes).unwrap();
-    fs::write(dir.path().join("data/nfl/elo-2007.json"), "untouched seed").unwrap();
-    let started = chrono::Utc::now();
-    let output = invoke(dir.path(), &["--json", "--report-dir", "reports"]);
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let tool = tool();
+    let (cfg, mut history) = evaluation_fixture();
+    let (report, stderr) = assert_read_only_and_repeatable(&tool, "model-evaluation-report", &cfg, &history);
     assert_eq!(
         report["split"],
-        serde_json::json!({"warmup_start": 2002, "tune_start": 2003, "tune_end": 2004, "test_end": 2006})
+        json!({"warmup_start": 2002, "tune_start": 2003, "tune_end": 2004, "test_end": 2006})
     );
-    assert_eq!(report["holdout_seasons"], serde_json::json!([2005, 2006]));
-    let run_at = chrono::DateTime::parse_from_rfc3339(report["run_at"].as_str().unwrap()).unwrap();
-    assert_eq!(run_at.offset().local_minus_utc(), 0);
-    assert!(run_at >= started && run_at <= chrono::Utc::now());
-    let report_path = dir
-        .path()
-        .join("reports")
-        .join(format!("model-evaluation-report-nfl-{}.json", run_at.format("%Y-%m-%d")));
-    let saved: Value = serde_json::from_slice(&fs::read(&report_path).unwrap()).unwrap();
-    assert_eq!(saved, report);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("Predicted 5 games in season 2006") && !stderr.contains("Favorites agree"));
+    assert_eq!(report["holdout_seasons"], json!([2005, 2006]));
+    assert_contains(&stderr, "Predicted 5 games in season 2006");
+    assert!(!stderr.contains("Favorites agree"));
     for method in ["bayesian", "elo", "equal_strength"] {
         let evaluation = &report["predictors"][method];
         assert_eq!(evaluation["games"], 10, "{method}");
@@ -72,35 +54,12 @@ fn cli_is_read_only_repeatable_and_scores_both_methods_on_heldout_seasons() {
     assert_eq!(report["tie_weights"].as_array().unwrap().len(), 2);
     assert_eq!(report["elo_settings"], serde_json::to_value(&cfg.elo).unwrap());
     assert_eq!(report["bayesian_settings"], serde_json::to_value(&cfg.bayesian).unwrap());
-    assert_eq!(report["config_sha256"], rating_core::digest(&config_bytes));
-    assert_eq!(report["history_sha256"], rating_core::digest(&history_bytes));
     assert!(!overlap_noted(&report));
-
-    let again = invoke(dir.path(), &["--json"]);
-    assert!(again.status.success());
-    let mut repeated: Value = serde_json::from_slice(&again.stdout).unwrap();
-    let mut original = report.clone();
-    original.as_object_mut().unwrap().remove("run_at");
-    repeated.as_object_mut().unwrap().remove("run_at");
-    assert_eq!(original, repeated);
-    assert_eq!(fs::read(dir.path().join("nfl.json")).unwrap(), config_bytes);
-    assert_eq!(fs::read(dir.path().join("data/nfl/history.json")).unwrap(), history_bytes);
-    assert_eq!(
-        fs::read_to_string(dir.path().join("data/nfl/elo-2007.json")).unwrap(),
-        "untouched seed"
-    );
-    assert_eq!(fs::read_dir(dir.path().join("data/nfl")).unwrap().count(), 2);
 
     // Changing the final held-out game changes its score but none of the predictions made before it.
     history.games.last_mut().unwrap().result = Some(Outcome::HomeWin);
-    fs::write(
-        dir.path().join("data/nfl/history.json"),
-        serde_json::to_vec(&history).unwrap(),
-    )
-    .unwrap();
-    let changed = invoke(dir.path(), &["--json"]);
-    assert!(changed.status.success());
-    let changed: Value = serde_json::from_slice(&changed.stdout).unwrap();
+    tool.write_history(&history);
+    let changed = tool.report(&[]);
     assert_eq!(report["tie_weights"], changed["tie_weights"]);
     assert_ne!(
         report["predictors"]["bayesian"]["pooled"],
@@ -114,60 +73,47 @@ fn cli_is_read_only_repeatable_and_scores_both_methods_on_heldout_seasons() {
 
 #[test]
 fn cli_prints_the_summary_by_default_and_still_saves_the_json_report() {
-    let dir = tempfile::tempdir().unwrap();
-    let (cfg, history) = fixture();
-    fs::create_dir_all(dir.path().join("data/nfl")).unwrap();
-    fs::write(dir.path().join("nfl.json"), serde_json::to_vec(&cfg).unwrap()).unwrap();
-    fs::write(
-        dir.path().join("data/nfl/history.json"),
-        serde_json::to_vec(&history).unwrap(),
-    )
-    .unwrap();
-    let output = invoke(dir.path(), &["--report-dir", "reports"]);
+    let tool = tool();
+    let (cfg, history) = evaluation_fixture();
+    tool.write_config(&cfg);
+    tool.write_history(&history);
+    let output = tool.run(&["--report-dir", "reports"]);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(
         stdout.starts_with("League nfl: held-out seasons 2005–2006, 10 games\n"),
         "{stdout}"
     );
-    assert!(stdout.contains("Favorites agree"));
+    assert_contains(&stdout, "Favorites agree");
     assert!(serde_json::from_str::<Value>(&stdout).is_err());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("Predicted 5 games in season 2006") && stderr.contains("Saved report to"));
+    assert_contains(&stderr, "Predicted 5 games in season 2006");
+    assert_contains(&stderr, "Saved report to");
     assert!(!stderr.contains("Favorites agree"));
-    let saved = fs::read_dir(dir.path().join("reports"))
+    let saved = tool
+        .path()
+        .join("reports")
+        .read_dir()
         .unwrap()
         .next()
         .unwrap()
         .unwrap()
         .path();
-    let mut saved: Value = serde_json::from_slice(&fs::read(saved).unwrap()).unwrap();
-    let json = invoke(dir.path(), &["--json"]);
-    assert!(json.status.success(), "{}", String::from_utf8_lossy(&json.stderr));
-    let mut printed: Value = serde_json::from_slice(&json.stdout).unwrap();
-    saved.as_object_mut().unwrap().remove("run_at");
-    printed.as_object_mut().unwrap().remove("run_at");
-    assert_eq!(saved, printed);
+    let saved: Value = serde_json::from_slice(&std::fs::read(saved).unwrap()).unwrap();
+    assert_eq!(without_run_at(&saved), without_run_at(&tool.report(&[])));
 }
 
 #[test]
 fn cli_boundaries_override_config_and_flag_seasons_inside_a_tuning_range() {
-    let dir = tempfile::tempdir().unwrap();
-    let (mut cfg, history) = fixture();
-    fs::create_dir_all(dir.path().join("data/nfl")).unwrap();
-    fs::write(
-        dir.path().join("data/nfl/history.json"),
-        serde_json::to_vec(&history).unwrap(),
-    )
-    .unwrap();
-    let run = |cfg: &rating_core::LeagueConfig, extra: &[&str]| -> Value {
-        fs::write(dir.path().join("nfl.json"), serde_json::to_vec(cfg).unwrap()).unwrap();
-        let output = invoke(dir.path(), &[&["--json"], extra].concat());
-        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-        serde_json::from_slice(&output.stdout).unwrap()
+    let tool = tool();
+    let (mut cfg, history) = evaluation_fixture();
+    tool.write_history(&history);
+    let run = |cfg: &LeagueConfig, extra: &[&str]| -> Value {
+        tool.write_config(cfg);
+        tool.report(extra)
     };
     let report = run(&cfg, &["--test-end", "2005"]);
-    assert_eq!(report["holdout_seasons"], serde_json::json!([2005, 2005]));
+    assert_eq!(report["holdout_seasons"], json!([2005, 2005]));
     assert_eq!(report["predictors"]["bayesian"]["games"], 5);
     assert!(!overlap_noted(&report));
 
@@ -178,10 +124,10 @@ fn cli_boundaries_override_config_and_flag_seasons_inside_a_tuning_range() {
         test_end: 2006,
     });
     let report = run(&cfg, &[]);
-    assert_eq!(report["holdout_seasons"], serde_json::json!([2006, 2006]));
+    assert_eq!(report["holdout_seasons"], json!([2006, 2006]));
     assert!(!overlap_noted(&report));
     let report = run(&cfg, &["--tune-end", "2004"]);
-    assert_eq!(report["holdout_seasons"], serde_json::json!([2005, 2006]));
+    assert_eq!(report["holdout_seasons"], json!([2005, 2006]));
     assert!(overlap_noted(&report));
     assert!(
         report["notes"]
@@ -190,43 +136,25 @@ fn cli_boundaries_override_config_and_flag_seasons_inside_a_tuning_range() {
             .iter()
             .any(|n| n.as_str().unwrap().starts_with("Seasons 2005–2005 "))
     );
+}
 
-    cfg.elo_tune = None;
-    cfg.bayes_tune = None;
-    fs::write(dir.path().join("nfl.json"), serde_json::to_vec(&cfg).unwrap()).unwrap();
-    let missing = invoke(dir.path(), &[]);
-    assert!(!missing.status.success());
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("elo_tune.tune_start"));
-    let report = run(&cfg, &["--tune-start", "2003", "--tune-end", "2004", "--test-end", "2006"]);
-    assert_eq!(report["holdout_seasons"], serde_json::json!([2005, 2006]));
+#[test]
+fn cli_split_flags_work_without_configured_defaults() {
+    let tool = tool();
+    let (cfg, history) = evaluation_fixture();
+    assert_split_flags_override_config(&tool, cfg, &history);
+    // With no configured tuning range, no held-out season is flagged.
+    let report = tool.report(&["--tune-start", "2003", "--tune-end", "2004", "--test-end", "2006"]);
     assert!(!overlap_noted(&report));
 }
 
 #[test]
 fn cli_rejects_invalid_splits_and_unfinished_history() {
-    let dir = tempfile::tempdir().unwrap();
-    let (cfg, history) = fixture();
-    fs::create_dir_all(dir.path().join("data/nfl")).unwrap();
-    fs::write(dir.path().join("nfl.json"), serde_json::to_vec(&cfg).unwrap()).unwrap();
-    let history_path = dir.path().join("data/nfl/history.json");
-    fs::write(&history_path, serde_json::to_vec(&history).unwrap()).unwrap();
-    let invalid = invoke(dir.path(), &["--test-end", "2004"]);
-    assert!(!invalid.status.success());
-    assert!(String::from_utf8_lossy(&invalid.stderr).contains("held-out seasons"));
-    let short = invoke(dir.path(), &["--test-end", "2007"]);
-    assert!(!short.status.success());
-    assert!(String::from_utf8_lossy(&short.stderr).contains("History must cover"));
-    let mut unfinished = history;
-    unfinished.games.last_mut().unwrap().result = None;
-    fs::write(&history_path, serde_json::to_vec(&unfinished).unwrap()).unwrap();
-    let unfinished = invoke(dir.path(), &[]);
-    assert!(!unfinished.status.success());
-    assert!(String::from_utf8_lossy(&unfinished.stderr).contains("unreported game"));
+    let (cfg, history) = evaluation_fixture();
+    assert_rejects_unusable_history(&tool(), &cfg, &history);
 }
 
 #[test]
 fn cli_requires_league() {
-    let output = Command::new(env!("CARGO_BIN_EXE_evaluate-model")).output().unwrap();
-    assert_eq!(output.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("--league <LEAGUE>"));
+    assert_requires_league(BIN);
 }
