@@ -52,6 +52,8 @@ adapters, Elo replay, the Bayesian model, and tuning validation. The binaries in
    hashes of the config and history bytes. The browser and the backtest reject a seed whose hashes don't match,
    so rerun `elo-ratings` after any config or history change.
 3. `elo-tune` and `bayes-tune` are offline parameter searches. They never modify config.
+4. `evaluate-model` scores the model's predictions, made with the configured settings, on held-out seasons, which
+   tuning never uses. It compares Bayesian predictions with in-season Elo ratings.
 
 The custom `projectData` plugin in `apps/web/vite.config.ts` serves the root `config/` and `data/` directories
 in dev, and copies them into the build.
@@ -106,7 +108,7 @@ the CD workflow then tags them and merges `master` back into `develop`. Pages de
 ## Docs map
 
 - `README.md`: user-facing behavior of the app, described in detail. Keep it in sync with UI changes.
-- `DEVELOPMENT.md`: setup, CLI options, checks, releases, tuning, backtesting.
+- `DEVELOPMENT.md`: setup, CLI options, checks, releases, tuning, model evaluation, backtesting.
 - `docs/model.md`: statistical methodology (Elo, the Davidson–Bradley–Terry Bayesian model, two-way
-  moneylines, tuning).
+  moneylines, tuning, model evaluation).
 - `docs/extending.md`: adding leagues and source adapters, and the parity-fixture table.

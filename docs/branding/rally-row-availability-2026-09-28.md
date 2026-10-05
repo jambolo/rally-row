@@ -2,17 +2,17 @@
 
 Checked September 28, 2026, approximately 1:25 p.m. Pacific / 20:25 UTC.
 
-This is a dated record, not a live availability report. The statuses below apply to that check.
+The statuses below are as of that check and may have changed since.
 
 ## Result
 
 The exact .com domain and core social handles are already taken. Alternate domain
-extensions are offered for registration. No exact U.S. federal word-mark record
-was found, but trademark availability has not been established.
+extensions were offered for registration. The U.S. federal trademark search found
+no exact word-mark match, but that alone does not clear the name.
 
-Scope: Rally Row / RallyRow as a sports matchup prediction brand. This is a
-preliminary U.S. federal word-mark and public-use screen, not a legal clearance
-opinion. The proposed R logo and tagline were not searched.
+Scope: Rally Row / RallyRow as the name of a sports matchup prediction app. This was
+a preliminary search of U.S. federal word marks and public use, not a legal clearance.
+The proposed R logo and tagline were not searched.
 
 ## Domains
 
@@ -26,12 +26,10 @@ opinion. The proposed R logo and tagline were not searched.
 
 The .com registry record identifies NameCheap, Inc. as registrar, with initial
 registration on December 12, 2024 and a listed expiration of December 12, 2026.
-Expiration is not a promise that a domain will become available. Visiting the
-domain returned a name-resolution error; that does not change its registered status.
+The owner can renew it, so the expiration date does not mean the domain will become
+available. The domain did not resolve when visited, but it is still registered.
 
-Namecheap displayed an Add to cart control for the alternate extensions. No domain
-was placed in a cart, purchased, reserved, or the subject of an offer. Availability
-can change before purchase.
+Namecheap showed an Add to cart button for each alternate extension.
 
 ## Social handles
 
@@ -46,9 +44,8 @@ The exact handle checked was @rallyrow.
 | Facebook | Occupied destination; /rallyrow redirects to an existing Rally Row profile at /rally.row/ | [Profile](https://www.facebook.com/rally.row/) |
 | Threads | Unknown; the requested profile redirected to login | [Requested profile](https://www.threads.com/@rallyrow) |
 
-These findings come from direct platform pages, not absence or presence in search
-engine results. No accounts were created, contacted, followed, or modified.
-Modified handles such as @rallyrowapp were not checked.
+These findings come from each platform's own pages, not from search engine results.
+Variants such as @rallyrowapp were not checked.
 
 ## U.S. federal trademark screen
 
@@ -62,11 +59,10 @@ no class restrictions for the exact-name queries.
 | CM:(rallyrow OR (rally AND row) OR "rally roe") | No results found |
 | CM:rally AND GS:(predict* OR fantasy OR (sports AND software)) | 24 results, including live and dead records |
 
-The default Wordmark search broadened a quoted phrase into thousands of results;
-that initial result was not treated as an exact-name check. The exact findings
-above were obtained with the explicit CM field query and verified after loading.
+The default Wordmark search treated the quoted phrase loosely and returned thousands
+of results, so the exact-name results above come from the CM field query instead.
 
-Related records surfaced by the broader search include:
+The broader search found these related records:
 
 | Mark | Serial | Observed status | Scope observed |
 | --- | --- | --- | --- |
@@ -74,43 +70,43 @@ Related records surfaced by the broader search include:
 | [RALI](https://tmsearch.uspto.gov/search/search-results/99827993) | 99827993 | Live, pending; approved for publication, not yet published | Mobile software connecting sports fans with bars and restaurants showing games; class 009 |
 | [FANRALLY](https://tmsearch.uspto.gov/search/search-results/90042025) | 90042025 | Live, registered in the search results | Sports/entertainment software; classes 009 and 042 |
 
-The RALLY SPORTS and RALI detail records were opened and their goods/services read.
-FANRALLY is recorded from its search-result summary. These are review candidates,
-not determinations that Rally Row would infringe or be refused registration.
+The scope for RALLY SPORTS and RALI comes from their full records; FANRALLY's comes
+from its search-result summary. These marks deserve a closer look, but finding them
+does not mean Rally Row would infringe or be refused registration.
 
 ## Public-use findings
 
-[MLB documents a prediction game called Rally](https://www.mlb.com/apps/rally/faq-apple);
-current operation was not established.
+[MLB has a help page for a prediction game called Rally](https://www.mlb.com/apps/rally/faq-apple);
+it is unclear whether the game still runs.
 
 A separate [Rally sports forecasting website](https://rally-app.uk/) presents
-sports prediction interfaces, including NFL and MLB. Its public page was readable,
-but its operation, market reach, owner, and legal rights were not established.
+sports prediction interfaces, including NFL and MLB. Its owner, reach, legal rights,
+and whether it is still active are unknown.
 
 An earlier exact-name web search also found a rowing workout titled Rally Row in
 [a UCanRow2 workout publication](https://ucanrow2.com/wp-content/uploads/2017/11/MeterMonsterFinal.pdf).
-A workout title alone does not establish a conflicting trademark.
+A workout title on its own does not show a conflicting trademark.
 
-These findings show use of related language in sports. They do not prove that
-any particular party holds rights that would block this project.
+These findings show that similar names are used in sports. They do not show that
+anyone holds rights that would block this project.
 
 ## Limits and interpretation
 
-The trademark outcome is **not cleared**, rather than available or unavailable.
-An exact-name search is only one part of the inquiry. The USPTO explains that
+Trademark status: **not cleared**. The name is neither confirmed available nor
+confirmed blocked. An exact-name search is only one part of a clearance search. The USPTO explains that
 similar marks used with related goods/services and earlier common-law use can
 matter even when an identical federal registration is absent.
 [USPTO clearance-search guidance](https://www.uspto.gov/trademarks/search/comprehensive-clearance-search-similar-trademarks).
 
-This check did not exhaust state trademark/business registries, the Trademark
+This check did not cover state trademark or business registries, the Trademark
 Official Gazette as a separate source, foreign registers, all spelling or
-phonetic variants, design marks, or unindexed commercial use. It cannot determine
-registrability or freedom to use the name.
+phonetic variants, design marks, or unindexed commercial use. It cannot show whether
+the name can be registered or used freely.
 
-Branding assessment: the .com and social-handle conflicts add friction to launching
-a consistent Rally Row identity.
+Branding impact: with the .com domain and exact social handles taken, Rally Row
+cannot use one matching name everywhere.
 
 ## Naming decision after review
 
-On September 28, 2026, the user selected Rally Row as the final brand name after
+On September 28, 2026, the maintainer chose Rally Row as the final brand name after
 reviewing these findings. Trademark availability remains unresolved.

@@ -26,7 +26,7 @@ The [Pro Football Hall of Fame's Texans history](https://www.profootballhof.com/
 documents their 2002 debut.
 
 Game dates and times are local to `America/New_York`. The source marks neutral-site games, and home
-advantage is removed for them. The source has no authoritative live/final flag, so the app uses a reported
+advantage is removed for them. The source doesn't say whether a score is final, so the app uses a reported
 result only from the next calendar day in Eastern Time.
 
 ### MLB
@@ -52,16 +52,15 @@ these rules:
   `officialDate`.
 - Ties: a final listing with `isTie` and equal scores is a tie. Regular-season ties are rare; postseason
   ties are rejected.
-- Venue: every game is a home game (`neutral` is always false). International series, the Field of Dreams
-  and Little League Classic games, and the 2020 Toronto Blue Jays' home games in Buffalo stay home games;
-  MLB neutral-site modeling is out of scope.
+- Venue: every game is a home game (`neutral` is always false), including international series, the Field
+  of Dreams and Little League Classic games, and the 2020 Toronto Blue Jays' home games in Buffalo.
 - Missing scores: a final listing without scores is dropped with a warning.
 - 2020: the 60-game season and its expanded postseason are included as-is.
 - Browser only: an unfinished postseason listing that names a provider placeholder team for an undecided
   matchup (a team id absent from the configuration's `aliases`) is dropped. Any other unknown team is an
   error.
 
-Every Stats API response carries this notice: `Copyright <year> MLB Advanced Media, L.P.  Use of any content on this page acknowledges agreement to the terms posted here http://gdx.mlb.com/components/copyright.txt`.
+Every Stats API response includes this notice: `Copyright <year> MLB Advanced Media, L.P.  Use of any content on this page acknowledges agreement to the terms posted here http://gdx.mlb.com/components/copyright.txt`.
 Those terms permit only individual, non-commercial, non-bulk use of the materials; any other use requires
 MLB Advanced Media's prior written authorization. Rally Row's importer, run by the maintainer, fetches one
 schedule per history season, and each visitor's browser fetches the current season directly from the Stats
@@ -100,9 +99,9 @@ H is zero at a neutral venue. The observed score S is 1 for a home win, 0 for an
 R'_h = R_h + K(S-E_h), \qquad R'_a = R_a - K(S-E_h).
 ```
 
-`E_h` is an expected fractional game score, not a separately modeled probability of a home win when ties are possible. The historical Elo system uses ties correctly without estimating three outcome probabilities.
+`E_h` is the home team's expected game score, with a tie counting as half a win. When ties are possible, it is not the probability of a home win. Elo scores ties this way without estimating separate win, loss, and tie probabilities.
 
-Games are sorted by season, UTC start time, and game ID, using the stored `start_time_utc` as authoritative.
+Games are sorted by season, stored UTC start time (`start_time_utc`), and game ID.
 Before each new season, and once before the target season, regression r is applied:
 
 ```math
@@ -119,7 +118,7 @@ Let `c = ln(10) / s`. Each team's latent strength has independent prior
 \theta_i \sim N(c(R_i-R_0), (c\sigma_R)^2).
 ```
 
-The means come from the Rust preseason Elo file. `sigma_R` is the configured `prior_sd_elo` (NFL 100, MLB 35.3553 Elo points), the initial uncertainty, not the team's historical standard error. Historical Elo alone does not identify a Bayesian prior variance.
+The means come from the Rust preseason Elo file. `sigma_R` is the configured `prior_sd_elo` (NFL 100, MLB 35.3553 Elo points), the initial uncertainty, not the team's historical standard error. Elo ratings alone cannot determine how wide the prior should be.
 
 ## Win, loss, and tie likelihood
 
@@ -151,16 +150,16 @@ The result is a **Laplace approximation**, not exact sampling. It retains the fu
 \quad \sigma_d^2 = \Sigma_{hh} + \Sigma_{aa} - 2\Sigma_{ha}.
 ```
 
-Predicted outcome probabilities average the likelihood over this normal distribution using deterministic Simpson quadrature over ±8 standard deviations (160 intervals). They are not just probabilities evaluated at the fitted mean. The displayed home-win credible interval transforms the 2.5th and 97.5th percentiles of d through the monotonically increasing home-win function. It describes uncertainty about the home team's win probability, not a range of possible game scores.
+Predicted outcome probabilities average the likelihood over this normal distribution, so they account for uncertainty in d instead of using only its mean. The average uses deterministic Simpson quadrature over ±8 standard deviations (160 intervals). The displayed home-win credible interval transforms the 2.5th and 97.5th percentiles of d through the monotonically increasing home-win function. It describes uncertainty about the home team's win probability, not a range of possible game scores.
 
 The matchup display also shows fair (no-vig) two-way American moneylines. A two-way line treats a tie as a push, so it depends only on the odds ratio r = P(home win) / P(away win), which conditioning on a decisive game leaves unchanged. The favorite's line is −round(100 · r) and the underdog's is +round(100 · r), with r taken as the larger side over the smaller. Both lines come from the same rounded magnitude, so they are exact mirror images. A magnitude of 100 is even money and is shown as +100 on both sides. If either win probability is zero, or the ratio overflows, no line is shown. Postseason games have no tie probability, so their moneylines are the plain two-outcome lines.
 
-The Rust `rating-core::bayesian` implementation uses the same likelihood, optimizer, compensated summation, covariance, and predictive integration as the browser. A shared fixture (`crates/rating-core/tests/fixtures/bayesian-parity.json`) checks both implementations. `bayes-tune` uses this model for offline chronological parameter search, keeping Elo fixed, regenerating preseason priors and tie weights from earlier seasons, and excluding same-UTC-day outcomes from predictions. It selects by mean season log loss, then evaluates a frozen choice on later held-out seasons. See [Bayesian parameter tuning](#bayesian-parameter-tuning) for search settings and report contents.
+The Rust `rating-core::bayesian` implementation uses the same likelihood, optimizer, compensated summation, covariance, and predictive integration as the browser. A shared fixture (`crates/rating-core/tests/fixtures/bayesian-parity.json`) checks both implementations. `bayes-tune` uses this model for offline chronological parameter search, keeping Elo fixed, regenerating preseason priors and tie weights from earlier seasons, and excluding same-UTC-day outcomes from predictions. It selects by mean season log loss, then scores the selected settings on later held-out seasons. See [Bayesian parameter tuning](#bayesian-parameter-tuning) for search settings and report contents.
 
 Each rebuild uses the original preseason priors and the current set of eligible outcomes, so reloads do
 not double-count games. Corrected outcomes replace their earlier versions. A source update that drops a
 previously completed game is rejected, preserving the previous snapshot. At each new season, strengths
-reset to newly generated preseason priors; Bayesian posteriors do not carry across seasons.
+reset to newly generated preseason priors; Bayesian posteriors do not carry over between seasons.
 
 ## Current settings
 
@@ -202,11 +201,81 @@ games of the same official date can inform it there, unlike in the app. For each
 preseason ratings and tie estimates use only earlier seasons.
 
 The backtest compares predictions with an equal-strength baseline using multiclass Brier score and
-natural-log loss. The baseline splits non-tie probability equally between the teams, with no home advantage,
-and uses the preseason tie parameter at equal strength in phases that allow ties. Brier score sums squared
-errors across the three outcomes; log loss penalizes low probability assigned to the observed outcome,
-with a probability floor of `1e-15` for numerical stability. Lower values are better for both measures. Parameter
-selection and evaluation are separate: later held-out seasons are scored after the parameter choice is frozen.
+natural-log loss, both defined in [Reading the scores](#reading-the-scores); lower values are better. The
+baseline splits non-tie probability equally between the teams, with no home advantage, and uses the preseason
+tie parameter at equal strength in phases that allow ties. Parameter selection and evaluation are separate:
+later held-out seasons are scored only after the parameters are chosen.
+
+## Reading the scores
+
+The backtest, both tuners, and `evaluate-model` score forecasts of completed games. A forecast gives each game's
+three outcomes probabilities `p_H` (home win), `p_A` (away win), and `p_T` (tie) that sum to one, and `o` is
+the outcome that happened. Each score is averaged over games:
+
+```math
+\text{log loss} = -\ln \max(p_o, 10^{-15}), \qquad
+\text{Brier} = \sum_{k \in \{H, A, T\}} \left(p_k - \mathbf{1}[o = k]\right)^2, \qquad
+\text{expected-score MSE} = (E - S)^2.
+```
+
+S is the observed home score: 1 for a home win, 1/2 for a tie, and 0 for an away win. E is the forecast's
+expected home score: `E_h` for Elo forecasts and `p_H + p_T/2` for the others. Accuracy, reported only by
+`evaluate-model`, is the share of decisive games won by the favored team, the one with the larger win
+probability; an exact toss-up counts 1/2, and ties are left out.
+
+| Score | Perfect forecast | Coin flip | Better |
+| --- | --- | --- | --- |
+| Log loss | 0 | ln 2 ≈ 0.693 | Lower |
+| Brier score | 0 | 0.5 | Lower |
+| Expected-score MSE | 0 | 0.25 | Lower |
+| Accuracy | 100% | 50% | Higher |
+
+The coin-flip column scores a forecast of 50% for each team and no tie, on a game that has a winner. Single
+games are noisy, so useful forecasts score much closer to the coin-flip column than the perfect one, and closer
+still in MLB, where single-game win probabilities rarely stray far from 50%. The equal-strength baseline gives
+every game that allows ties a small tie probability, so it scores slightly worse than a coin flip on decisive
+games, and each tie that does happen costs it more than 5 in log loss. A single tie in a season therefore
+lifts the baseline's log loss noticeably above 0.693.
+
+The four scores weigh mistakes differently:
+
+- **Log loss** depends only on the probability given to what happened and grows without limit as that
+  probability approaches zero. It punishes confident misses severely, and an outcome called nearly
+  impossible, such as a tie, can dominate a season's score. `bayes-tune` selects on it.
+- **Brier score** uses all three probabilities, and no game adds more than 2, so it is gentler with confident
+  misses.
+- **Expected-score MSE** judges only the expected score, which is what Elo predicts, so it cannot tell how a forecast
+  splits probability between a tie and the two wins. `elo-tune` selects on it. Where the tie probability is
+  zero, it equals half the Brier score.
+- **Accuracy** records only which team was favored: a 51% favorite and a 90% favorite count the same when they
+  win. It is the coarsest of the four and can disagree with the others; one forecast can pick more winners
+  while another assigns better probabilities.
+
+Log loss and Brier score are proper scoring rules: a forecast minimizes its expected score by stating the true
+probabilities. Expected-score MSE rewards only a correct expected score, and accuracy rewards only favoring the
+more likely winner.
+
+Calibration bins group games by the forecast probability of each outcome, in tenths (`elo-tune` bins expected
+scores instead). In a well-calibrated forecast, each bin's observed rate or score is close to its mean forecast.
+
+### Differences and standard errors
+
+Season means (`mean_season_*` in the tuner reports, `mean_season` in the `evaluate-model` report, and "Mean of
+seasons" in its summary) weight each season equally, whatever its number of games; pooled scores weight each
+game equally. The tuners select on season means.
+
+The tuners report `baseline_minus_selected` differences (current minus selected settings), and `evaluate-model`
+reports `bayesian_advantage`. Both are signed so that a positive value favors the selected settings or the
+Bayesian predictions, and both are in the score's own units: an accuracy advantage of 0.0058 is 0.58
+percentage points.
+
+A paired standard error is the standard deviation of the per-season differences, or the per-game differences
+in `evaluate-model`, divided by the square root of their number. A difference within about two standard errors of
+zero could be noise. With only a few held-out seasons, the season standard error is itself
+imprecise, and games within a season share team-strength errors, so the per-game standard error understates
+the uncertainty. Treat both as rough guides. Comparing a difference with the gap to the equal-strength baseline
+also helps: a 0.002 difference in log loss between two forecasts is small next to the 0.05 by which both beat
+the baseline.
 
 ## Elo-only tuning
 
@@ -226,7 +295,8 @@ History must contain completed games for every season and the league's completio
 Super Bowl for each NFL season, a completed World Series game for each MLB season.
 The initial rating and Elo scale stay fixed at their configured values. The objective is equally weighted
 **season mean squared error** between each pre-game expected score and its outcome (win = 1, tie = 0.5,
-loss = 0). This evaluates Elo's fractional expected score, not three separate outcome probabilities.
+loss = 0). This evaluates Elo's fractional expected score, not three separate outcome probabilities; see
+[Reading the scores](#reading-the-scores).
 
 The search starts from the configuration's `tuning_grids.elo` when present; neither shipped configuration
 sets one, so both leagues start from the default grid of 125 combinations: K = `{10, 15, 20, 30, 40}`, home advantage = `{0, 25, 40, 55, 70}`,
@@ -240,15 +310,15 @@ To avoid choosing an isolated minimum, selection prefers the candidate closest t
 those within one paired-season standard error of the minimum MSE. Each parameter difference is divided by
 its scale (current K, 25 home Elo, or 0.25 regression), then squared; distance is the sum of those squares. Lower MSE
 breaks distance ties. The report includes both this conservative selection and the absolute minimum.
-This is a stability heuristic, not a statistical significance test.
+The standard-error rule favors stable settings; it is not a significance test.
 
-Only after selection is frozen are the chosen and current settings evaluated on the held-out seasons.
+Only after selection are the chosen and current settings evaluated on the held-out seasons.
 Earlier held-out outcomes update ratings for later games, but never change the selected parameters.
 The report includes per-season and pooled MSE, first/second halves of each season by game count, expected-score
 calibration bins, paired differences and descriptive standard errors, the ten lowest-MSE candidates,
 input SHA-256 hashes, and an RFC 3339 UTC run-start timestamp (`run_at`). Positive MSE improvement means the
-selected settings performed better. The report does not claim an improvement is established when it is small
-or inconsistent; limited held-out seasons constrain inference. Repeatedly changing the search after reading holdout scores would invalidate that evaluation.
+selected settings performed better. With only a few held-out seasons, a small or inconsistent improvement may
+be noise. Changing the search after reading held-out scores would make them useless for evaluation.
 
 Both tuners' reports describe the search: `search.grid_source` (`default` or `config`), `search.coarse_grid`
 (the starting grid), `search.evaluated_ranges` (the minimum and maximum evaluated value of each parameter),
@@ -267,7 +337,7 @@ required, and each season must include the league's completion marker.
 For each evaluated season, preseason Elo and the tie estimate use only earlier seasons.
 Each UTC date is predicted from a fresh fit using only earlier dates in that season. Same-day outcomes
 cannot influence one another. Team strength resets to the newly generated preseason prior at each season
-boundary; Bayesian posteriors do not carry across seasons.
+boundary; Bayesian posteriors do not carry over between seasons.
 
 The search starts from the configuration's `tuning_grids.bayesian` when present, else from the default grid
 of 120 combinations:
@@ -292,31 +362,66 @@ configuration supplies its own starting grid.
 
 Current settings are also included. The three best initial candidates receive one local refinement using
 each parameter multiplied by `1/sqrt(2)`, `1`, or `sqrt(2)`; rates must stay below 1. Duplicate candidates
-are skipped. This is a bounded search, not a guarantee of a global optimum.
+are skipped. The search covers a limited set of candidates and can miss better settings outside it.
 
 Selection minimizes equally weighted **season mean log loss**, using natural logs and all three outcomes.
 Among candidates within one paired-season standard error of the minimum, it prefers the smallest sum of
 squared log parameter ratios relative to current settings, breaking ties by log loss. The report identifies
-both this conservative selection and the absolute minimum. Rare ties may leave smoothing parameters weakly
-identified; this preference is a stability heuristic, not a significance test.
+both this conservative selection and the absolute minimum. Because ties are rare, the data may say little
+about the smoothing parameters. As in the Elo search, the standard-error rule favors stable settings;
+it is not a significance test.
 
-Only after selection is frozen are current and selected settings evaluated on the held-out seasons.
-Earlier held-out outcomes can inform later predictions but never change selected parameters. Holdout validity
-also requires that these seasons did not influence Elo settings or earlier search choices.
+Only after selection are current and selected settings evaluated on the held-out seasons.
+Earlier held-out outcomes can inform later predictions but never change selected parameters. The held-out
+scores are fair only if these seasons also had no influence on the Elo settings or on earlier search choices.
 
 Reports include input hashes, fixed Elo settings, the search grid and refinement, top candidates, per-season and pooled log
 loss/Brier scores, first/second season halves, per-outcome calibration, expected versus observed ties, and
 paired season differences. They also include the search fields described under [Elo-only tuning](#elo-only-tuning).
-Brier score sums squared errors across all three outcomes. Positive log-loss
+[Reading the scores](#reading-the-scores) defines log loss and Brier score. Positive log-loss
 improvement means the selected parameters performed better. Neither tuning process automatically changes model settings.
+
+## Model evaluation
+
+`evaluate-model` scores the model's predictions, made with the configured settings (the values adopted after
+tuning), and compares two ways of learning from in-season results. It scores the held-out seasons,
+`tune_end + 1` through `test_end` of the `bayes_tune` split (which falls back to `elo_tune`). The tuners never
+use those seasons to select parameters. Settings score better on the seasons used to choose
+them, so held-out scores give a fairer measure of forecasting skill.
+
+For each held-out season, preseason Elo ratings and the tie weight are rebuilt from earlier seasons only, and
+every predictor starts from them:
+
+- **Bayesian**: each UTC date is predicted from a fresh posterior fit to the season's earlier dates, as in
+  [Bayesian parameter tuning](#bayesian-parameter-tuning).
+- **Elo**: ratings update after every game in start order, as in the [historical replay](#historical-elo). Each
+  UTC date is predicted from the ratings at the start of that date, so neither predictor sees same-day outcomes.
+  `elo-tune` also updates between games on the same date, so its held-out MSE can differ slightly. Three-way
+  probabilities apply the Davidson tie term to the pregame difference `d = ln(10)(R_h - R_a + H)/s` with the
+  season's tie weight, which is zero where ties are not allowed. This keeps Elo's odds in decisive games:
+  `P(h) / (P(h) + P(a)) = E_h`.
+- **Equal strength**: the backtest's reference baseline, with no home advantage, the non-tie probability split
+  evenly, and the season's tie weight at equal strength.
+
+Each predictor is scored with the four measures defined in [Reading the scores](#reading-the-scores): log loss,
+Brier score, expected-score MSE, and accuracy. The report gives equally weighted season means, pooled scores,
+per-season scores with first and second halves by game count, expected and observed ties, and per-outcome
+calibration bins.
+
+The comparison pairs the Bayesian and Elo predictions game by game. For each metric, `bayesian_advantage` is
+positive when the Bayesian predictions scored better (lower loss or higher accuracy); the report gives the
+mean-season and pooled advantages with paired-season and paired-game standard errors (see
+[Differences and standard errors](#differences-and-standard-errors)). It also counts the decisive games whose
+two favorites differ and which favorite won, and reports the mean and maximum absolute difference in home-win
+probability.
 
 ## Limits and validation
 
 - Team strength is modeled as constant within each fitted season. There is no explicit random walk over time, injury adjustment, roster change, rest effect, or recency weighting within that season.
 - The covariance and intervals are approximate and conditional on the selected hyperparameters, fixed home advantage, and fixed tie parameter. They do not include all sources of forecast uncertainty.
-- Configured parameters and tuning tools do not establish forecasting superiority. Small or inconsistent held-out improvements and a limited number of seasons constrain conclusions. Repeatedly adjusting a search after reading holdout scores invalidates that evaluation.
-- Historical continuity across a franchise relocation is a deliberate team-identity rule, not a claim of unchanged roster quality.
-- Result timing depends on the source. The NFL source does not expose an authoritative live/final flag, so the app waits until the next calendar day in Eastern Time before using a reported outcome. MLB results count as soon as the Stats API marks a game final. Later corrections are accepted at the next successful update.
+- Tuning finds the settings that scored best on past seasons; it does not prove that the model forecasts better than alternatives. With only a few held-out seasons, small or inconsistent improvements may be noise. Adjusting a search after reading held-out scores makes them useless for evaluation.
+- A relocated franchise keeps its rating history because ratings follow team identity. This does not assume the roster stayed the same.
+- Result timing depends on the source. The NFL source doesn't say whether a score is final, so the app waits until the next calendar day in Eastern Time before using a reported outcome. MLB results count as soon as the Stats API marks a game final. Later corrections are accepted at the next successful update.
 - MLB games are never neutral-site games in the model, including games at special or international venues.
 - Backtests refit using earlier dates only. Evaluate held-out seasons and calibration before drawing conclusions about model quality.
 

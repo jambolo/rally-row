@@ -36,6 +36,7 @@ Dependency install-script permissions and release-age exceptions are in
 | `apps/elo-ratings/` | Rust Elo executable: writes a league's preseason seed `data/<id>/elo-<season>.json` |
 | `apps/elo-tune/` | Offline Elo parameter search and held-out evaluation |
 | `apps/bayes-tune/` | Offline Bayesian parameter search with fixed Elo and held-out evaluation |
+| `apps/evaluate-model/` | Offline scoring of Bayesian and in-season Elo predictions on held-out seasons, made with the configured settings |
 | `apps/web/src/` | Browser app: league registry (`leagues.ts`) and league selection (`selection.ts`), contracts, source adapters and their registry (`adapters/`), Bayesian model, service and refresh worker, IndexedDB persistence (`persistence.ts`), small-key localStorage (`small-store.ts`), React interface |
 | `apps/web/test/` | Vitest tests: model, adapters and parity fixtures, league selection and switching, storage, startup/cache, identity |
 | `apps/web/scripts/` | Node backtest |
@@ -78,7 +79,8 @@ All command-line programs and the backtest take these options:
 | `--input <file>...` | `history-importer` | Reads saved provider files instead of downloading: one nflverse games CSV (NFL), one Stats API schedule JSON per season from `history_start` through `--through-season` (MLB), or one canonical JSON envelope. |
 | `--target-season <year>` | `elo-ratings` | Seed season; default the current season. |
 
-The tuners and the backtest take further options; see [Tuning](#tuning) and [Backtesting](#backtesting).
+The tuners, the model evaluation, and the backtest take further options; see [Tuning](#tuning),
+[Model evaluation](#model-evaluation), and [Backtesting](#backtesting).
 
 The importer replaces `data/<id>/history.json` only when every imported season has completed games and the
 league's completion marker (a completed Super Bowl for NFL, a completed World Series game for MLB); on
@@ -133,7 +135,7 @@ Workflows in [`.github/workflows/`](.github/workflows/):
   the site with `data/` and `config/`, and deploys `apps/web/dist`. Runs on `master` pushes, manual
   dispatch, and the first Tuesday of each month at 09:17 UTC; the monthly run publishes each league's
   new-season seed after its configured rollover month. A new league needs its own importer and Elo lines
-  in the workflow. Deployment is independent of CD and is not gated on a successful release.
+  in the workflow. Deployment runs separately from CD and does not wait for a release to succeed.
 
 ### Versions and releases
 
@@ -219,10 +221,42 @@ adopting them. Neither tuner changes the configuration.
 
 After applying tuned parameters, regenerate Elo seeds and rebuild the site.
 
+## Model evaluation
+
+`evaluate-model` scores the model's predictions, made with the configured (tuned) settings, on a league's
+held-out seasons. It compares two predictors on the same games: the Bayesian model and Elo ratings updated after
+every game. It uses the held-out seasons because the tuners never use them to select parameters. Like the tuners,
+it runs offline against `data/<id>/history.json`. Method and report contents:
+[Model evaluation](docs/model.md#model-evaluation); what the scores mean and how to compare them:
+[Reading the scores](docs/model.md#reading-the-scores).
+
+```powershell
+cargo run --release -p evaluate-model -- --league nfl
+cargo run --release -p evaluate-model -- --league mlb
+
+# Print the full JSON report instead of the summary
+cargo run --release -p evaluate-model -- --league nfl --json
+
+# Also save the JSON report
+cargo run --release -p evaluate-model -- --league nfl --report-dir target
+
+# Split overrides; the held-out seasons are tune_end + 1 through test_end
+cargo run --release -p evaluate-model -- --league nfl --tune-end 2022 --test-end 2025
+```
+
+Unlike the tuners, `evaluate-model` prints a human-readable summary table to stdout by default. Its layout is not
+a stable format; programs should pass `--json`, which prints the full JSON report to stdout instead of the
+summary. Progress messages go to stderr either way. `--report-dir` also writes the JSON report, in either mode, to
+`model-evaluation-report-<league>-<YYYY-MM-DD>.json` using the UTC run date. Split defaults and overrides
+(`--tune-start`, `--tune-end`, `--test-end`) match `bayes-tune`: `bayes_tune`, falling back to `elo_tune`, so
+both shipped leagues evaluate 2023–2025. The tool validates the split as the tuners do, and its notes flag any
+held-out season that falls within a configured tuning range. The MLB run takes a few seconds in a release
+build. The tool scores whatever the configuration holds, so apply tuned parameters before running it.
+
 ## Backtesting
 
 The Node backtest reads a league's local history and Elo seed, then downloads the evaluated season's games
-through the league's source adapter. It requires network access and has no `--input` option. `--season`
+through the league's source adapter, so it requires network access. `--season`
 (default the current season) selects the evaluated season; the seed must be trained through the previous
 season. Each UTC date is predicted from earlier UTC dates only.
 

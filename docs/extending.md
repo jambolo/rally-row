@@ -1,6 +1,6 @@
 # Add a league
 
-Rally Row serves every league in its league registry; the NFL and MLB ship today. Rust and TypeScript source adapters share the same team and outcome metadata. Historical storage uses an authoritative UTC start time; the current-season browser also keeps source-local timing fields. There is no league-specific team count, schedule length, or Elo formula in either model. Provider-specific rules, such as finality, result eligibility, the pregame day, and the historical completion marker, live in source adapters.
+Rally Row serves every league in its league registry; the NFL and MLB ship today. Rust and TypeScript source adapters share the same team and outcome metadata. Historical data stores each game's UTC start time; the browser's current-season data also keeps the source's local timing fields. There is no league-specific team count, schedule length, or Elo formula in either model. Provider-specific rules, such as finality, result eligibility, the pregame day, and the historical completion marker, are defined only in source adapters.
 
 Adding a league takes these steps:
 
@@ -12,7 +12,7 @@ Adding a league takes these steps:
 
 ## Configuration
 
-Create `config/<id>.json`, usually by copying `config/nfl.json` or `config/mlb.json`. The league id `<id>` uses letters, digits, and hyphens; it names the file and must equal the file's `id`. Every program reads `<config-dir>/<id>.json` for `--league <id>` and rejects a file whose `id` differs. Change the name, complete team list, aliases, historical start, season rollover month, source, display vocabulary, windows, model settings, and tie rules. These are sport/league choices rather than values that can safely be inferred by a generic algorithm.
+Create `config/<id>.json`, usually by copying `config/nfl.json` or `config/mlb.json`. The league id `<id>` uses letters, digits, and hyphens; it names the file and must equal the file's `id`. Every program reads `<config-dir>/<id>.json` for `--league <id>` and rejects a file whose `id` differs. Change the name, complete team list, aliases, historical start, season rollover month, source, display vocabulary, windows, model settings, and tie rules.
 
 | Key | Contents |
 | --- | --- |
@@ -39,9 +39,9 @@ For the existing generic provider, use:
 }
 ```
 
-Set `ties_allowed_in` to `[]` if no games may end in a tie, `["regular"]` if only regular-season games allow ties, or `["regular", "postseason"]` if both phases do. A normalized tie in a forbidden phase is rejected. Elo continues to support a 0.5 tie outcome where permitted.
+Set `ties_allowed_in` to `[]` if no games may end in a tie, `["regular"]` if only regular-season games allow ties, or `["regular", "postseason"]` if both phases do. A tie in a phase that doesn't allow ties is an error. Where ties are allowed, Elo scores a tie as 0.5.
 
-Team IDs are stable franchise identities. Map renamed/relocated aliases to those identities, rather than creating a new team unless it is genuinely a new franchise. Each team has a current `name` and `location`, plus `eras` containing `from_season`, inclusive `through_season` (null for the open-ended current era), historical `name`, home-market `location`, optional display `abbreviation` (default: the first source id), and accepted `source_ids`. Eras must be contiguous and non-overlapping, cover the configured history start, and end in an open-ended era matching the current metadata. See [franchise identity rules](team-history.md). The model assumes the configured team list is appropriate for the entire modeled historical period. Supporting league expansion *within* that period may need activation dates and a policy for new-team priors.
+Team IDs are stable franchise identities. Map the aliases of renamed or relocated teams to those identities; create a new team only for a new franchise. Each team has a current `name` and `location`, plus `eras` containing `from_season`, inclusive `through_season` (null for the open-ended current era), historical `name`, home-market `location`, optional display `abbreviation` (default: the first source id), and accepted `source_ids`. Eras must be contiguous and non-overlapping, cover the configured history start, and end in an open-ended era matching the current metadata. See [franchise identity rules](team-history.md). The model assumes the configured team list is appropriate for the entire modeled historical period. Supporting league expansion *within* that period may need activation dates and a policy for new-team priors.
 
 ### Display vocabulary
 
@@ -100,11 +100,11 @@ The TypeScript interface `SourceAdapter` in `apps/web/src/adapters/types.ts` ser
 
 The registry in `apps/web/src/adapters/index.ts` lists `nflverseCsv`, `canonicalJson`, and `mlbStatsApi`, in the modules `nflverse-csv.ts`, `canonical-json.ts`, and `mlb-statsapi.ts`. `adapterFor(config)` returns the configuration's adapter, and `isSourceKind(kind)` validates configurations.
 
-To support an upstream API whose response differs from the existing formats, add a Rust module under `crates/rating-core/src/adapters/` and register it in `ADAPTERS`, add a TypeScript module under `apps/web/src/adapters/` and register it in `index.ts`, and add a shared parity fixture ([Tests and parity fixtures](#tests-and-parity-fixtures)). The provider endpoint must permit browser requests through CORS. Keep source parsing separate from ratings. Never silently map unknown teams, turn missing results into ties, or reuse a previous season's priors when a new season begins. The canonical adapter trusts every non-null outcome as final, so an authoritative final-status policy belongs in its provider.
+To support an upstream API whose response differs from the existing formats, add a Rust module under `crates/rating-core/src/adapters/` and register it in `ADAPTERS`, add a TypeScript module under `apps/web/src/adapters/` and register it in `index.ts`, and add a shared parity fixture ([Tests and parity fixtures](#tests-and-parity-fixtures)). The provider endpoint must permit browser requests through CORS. Keep source parsing separate from ratings. Do not guess a mapping for an unknown team, turn a missing result into a tie, or reuse a previous season's priors when a new season begins. The canonical adapter treats every non-null outcome as final, so its provider must publish only final results.
 
 ## Provider response
 
-The generic `canonical-json` HTTPS endpoint returns all relevant historical seasons and the current season in this envelope. Additional envelope metadata is allowed. This example is illustrative, not actual game data:
+The generic `canonical-json` HTTPS endpoint returns all relevant historical seasons and the current season in this envelope, which may include additional metadata:
 
 ```json
 {
@@ -137,15 +137,15 @@ The generic `canonical-json` HTTPS endpoint returns all relevant historical seas
 - `season`: a consistent integer season label, also for games played in the next calendar year.
 - `date`, `time`, `timezone`: local calendar date, optional HH:mm game start time, and IANA time zone. The date remains required when the time is null.
 - `start_time_utc`: omit this field in provider responses. Both adapters derive it from the required local date, optional time, and timezone. The Rust importer ignores a supplied value; the browser validates any supplied value's format before replacing it with the derived timestamp.
-- `round`: positive integer round index; it is for display, not modeling.
-- `round_label`: source-specific round label; it is metadata, not a rating input.
+- `round`: positive integer round index, used only for display.
+- `round_label`: source-specific round label. Postseason display labels may use it; ratings do not.
 - `neutral`: true disables home advantage.
 - `home_source_id`, `away_source_id`: original provider abbreviations/IDs. They must resolve to the matching stable franchise through configuration; use the stable IDs when your upstream uses them.
 - `id`: unique game ID within the league, stable across updates and score corrections.
 
 Normalization sorts by `(season, start_time_utc, id)`, using IANA timezone rules for historical daylight saving offsets. A missing date is a source error and aborts the import without replacing the saved history. A missing time (omitted, null, or empty) or a time in a daylight saving gap uses local midnight. A repeated time during a daylight saving overlap uses the earlier UTC occurrence. The importer prints warnings to stderr identifying each affected game and the fallback or selected occurrence. If local midnight itself does not exist, import fails. Historical output discards the original local fields. The current-season browser retains them for display and provider-specific result eligibility.
 
-The importer accepts this exact envelope from HTTPS or through its `--input` file option. The TypeScript app independently downloads the provider and persists only the selected current season. The Elo program reads only historical JSON and does not depend on the provider implementation.
+The importer accepts this exact envelope from HTTPS or through its `--input` file option. The browser app downloads from the provider itself and saves only the current season. The Elo program reads only the historical JSON, so it works with any provider.
 
 ## Historical output
 
@@ -162,7 +162,7 @@ The importer writes `data/<league>/history.json` with these fields:
 | `teams` | Franchise identity registry described in [Configuration](#configuration) |
 | `games` | Array of normalized historical game records |
 
-Each game has the following structure. This example is illustrative, not actual game data:
+Each game has the following structure:
 
 ```json
 {
@@ -182,20 +182,19 @@ Each game has the following structure. This example is illustrative, not actual 
 }
 ```
 
-The identity, season, phase, venue, and result fields follow the [provider contract](#provider-response).
+The identity, season, phase, venue, and result fields follow the [provider response](#provider-response) format.
 Historical records store `start_time_utc` instead of the provider's `date`, `time`, and `timezone` fields.
-The importer serializes this required timestamp as RFC 3339 UTC with `Z`. Readers treat it as the
-authoritative start instant, require an explicit offset, and sort games by `(season, start_time_utc, id)`.
+The importer serializes this required timestamp as RFC 3339 UTC with `Z`. Programs that read the file use it as the
+game's start time, require an explicit offset, and sort games by `(season, start_time_utc, id)`.
 Missing, null, or malformed timestamps are errors.
 
-The browser and Node backtest verify the history file's hash; they obtain game records from the provider
-and do not deserialize the historical game records.
+The browser and Node backtest only check the history file's hash; they get game records from the provider.
 
 Generate the Elo seed from the published history and configuration so its SHA-256 hashes match those files.
 
 ## League registry
 
-`leagueIds` in `apps/web/src/leagues.ts` is the browser's only list of league ids (`['nfl', 'mlb']`). Each id names its published configuration, `config/<id>.json`. Adding an id adds the league to the header's **League** switcher and makes `#<id>` a valid address hash. Registry order breaks ties in the default-league rule ([Windows](#windows)). The shared interface contains no league ids or labels; it takes them from the configuration and the league's adapter.
+`leagueIds` in `apps/web/src/leagues.ts` is the browser's only list of league ids (`['nfl', 'mlb']`). Each id names its published configuration, `config/<id>.json`. Adding an id adds the league to the header's **League** switcher and makes `#<id>` a valid address hash. Registry order breaks ties in the default-league rule ([Windows](#windows)). The rest of the app has no league ids or labels; it reads them from the configuration and the league's adapter.
 
 The Vite build (`apps/web/vite.config.ts`) serves and publishes every JSON file under the repository's `config/` and `data/` directories, as `config/<id>.json`, `data/<id>/history.json`, and `data/<id>/elo-<season>.json`. If a program writes to another data directory, copy its outputs into `data/<id>/` before building.
 
@@ -215,7 +214,7 @@ The IndexedDB module is `apps/web/src/persistence.ts`, and `apps/web/src/small-s
 
 ## Generate and publish data
 
-Every command-line program and the backtest take `--league <id>`, `--config-dir <dir>` (default `config`), and `--data-dir <dir>` (default `data`). [Data and configuration](../DEVELOPMENT.md#data-and-configuration) lists every option and the commands for the shipped leagues; [Tuning](../DEVELOPMENT.md#tuning) and [Backtesting](../DEVELOPMENT.md#backtesting) cover evaluation. For a new league, generate its history and current-season seed:
+Every command-line program and the backtest take `--league <id>`, `--config-dir <dir>` (default `config`), and `--data-dir <dir>` (default `data`). [Data and configuration](../DEVELOPMENT.md#data-and-configuration) lists every option and the commands for the shipped leagues; [Tuning](../DEVELOPMENT.md#tuning), [Model evaluation](../DEVELOPMENT.md#model-evaluation), and [Backtesting](../DEVELOPMENT.md#backtesting) cover evaluation. For a new league, generate its history and current-season seed:
 
 ```text
 cargo run --release -p history-importer -- --league <id>
@@ -250,4 +249,4 @@ A new adapter needs its own fixture of provider documents and expected games, co
 
 ## Limits
 
-Future multi-leg competitions, aggregate scores, or matches involving more than two teams require an expanded game and likelihood model; the supplied pairwise contract cannot represent them without a deliberate extension.
+The game format and likelihood describe a single game between two teams. Multi-leg competitions, aggregate scores, and matches with more than two teams would need both to be extended.

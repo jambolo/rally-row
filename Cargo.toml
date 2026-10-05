@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["apps/history-importer", "apps/elo-ratings", "apps/elo-tune", "apps/bayes-tune", "crates/rating-core"]
+members = ["apps/history-importer", "apps/elo-ratings", "apps/elo-tune", "apps/bayes-tune", "apps/evaluate-model", "crates/rating-core"]
 
 [workspace.package]
-version = "1.4.0"
+version = "1.4.1"
 edition = "2024"
 license = "MIT"
 
@@ -14,9 +14,9 @@ chrono-tz = "0.10"
 clap = { version = "4", features = ["derive"] }
 csv = "1"
 fs2 = "0.4"
-# 0.13 split the old `rustls-tls-native-roots` feature: rustls for the TLS backend,
-# rustls-native-certs to verify against the operating system trust store.
-reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls", "rustls-native-certs"] }
+# Since 0.13.5 the rustls feature verifies against the operating system trust store
+# (rustls-platform-verifier), replacing the old rustls-native-certs feature.
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "rustls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"

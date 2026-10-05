@@ -74,10 +74,9 @@ and February 20 to MLB (neither league is in season and MLB's season starts soon
    chance of winning a decisive game. For example, 75.9% / 23.8% with a 0.3% tie becomes 76.1% / 23.9%,
    shown as −319 / +319. The two lines are always mirror images, and even money is shown as +100.
 
-The probabilities describe possible outcomes, not predicted scores. The uncertainty interval describes
-how precisely the model estimates a team's win probability; it is not a range of possible game scores.
-Displayed percentages are rounded, so their sum can differ slightly from 100%. The moneylines are the
-model's fair prices, not betting advice or market odds.
+The model predicts outcomes, not scores. The uncertainty interval shows how precisely it estimates a
+team's win probability. Displayed percentages are rounded, so their sum can differ slightly from 100%.
+The moneylines are the model's fair prices, not betting advice or market odds.
 
 ### Follow the season
 
@@ -110,7 +109,7 @@ Both leagues use the same model and the same screens. These details differ:
 
 The status card shows **Data retrieved** and **Last checked**. These are your browser's timestamps, not
 the data provider's publication time. Compatible saved results remain usable while an update is being prepared.
-If an update fails, the app retains the previous snapshot and displays a warning.
+If an update fails, the app keeps the previous results and displays a warning.
 
 The footer shows the running app version. Loading a different version rebuilds saved predictions before
 showing them. If that rebuild fails, the app reports an error and keeps the saved data for retry.
@@ -118,8 +117,8 @@ showing them. If that rebuild fails, the app reports an error and keeps the save
 The status card also summarizes the league's result policy; **How these predictions work** explains it and
 links to the league's data source:
 
-- NFL results enter the model on the next calendar day in Eastern Time. The source has no authoritative
-  live/final flag, so today's scores are deliberately excluded.
+- NFL results enter the model on the next calendar day in Eastern Time. The source doesn't say whether a
+  score is final, so the app ignores today's scores.
 - MLB results enter the model as soon as the provider marks a game final. Postponed, suspended, and
   canceled games are not results.
 
@@ -128,12 +127,12 @@ Provider delays can extend this wait.
 
 The app checks a league for updates when it loads, with a one-minute cooldown between attempts for each
 league. Reload to check again; an open page does not poll periodically. Corrections to eligible outcomes and
-updates to published preseason ratings or historical data are incorporated on a successful update. NFL
+updates to published preseason ratings or historical data take effect on the next successful update. NFL
 results that become eligible after midnight Eastern also trigger a rebuild on the next successful check,
 even if the source data is unchanged. A newly final MLB game changes the source data, so the next
 successful check rebuilds.
 
-Saved data belongs to the current browser, and each league keeps its own. If browser storage is unavailable
+Saved data stays in the current browser, and each league keeps its own. If browser storage is unavailable
 or full, the app still runs but cannot preserve results across reloads.
 
 The season is selected automatically for each league on page load (see [League differences](#league-differences)).
@@ -157,8 +156,8 @@ current-season wins, losses, and ties. It accounts for opponent strength, home a
 tie rules, and uncertainty to produce matchup probabilities. Both leagues use the same model with their own
 configured settings.
 
-The model does not use score margins, injuries, rosters, or betting markets. Predictions are estimates,
-not guarantees. Evaluation tools use chronological backtests and separate tuning and held-out seasons.
+The model does not use score margins, injuries, rosters, or betting markets. Evaluation tools use
+chronological backtests and separate tuning and held-out seasons.
 
 See [Statistical model](docs/model.md) for data sources and their terms, formulas, model settings, parameter
 selection, and limitations.
