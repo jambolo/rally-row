@@ -73,10 +73,16 @@ and February 20 to MLB (neither league is in season and MLB's season starts soon
    margin (vig). A two-way line treats a tie as a push (the stake is refunded), so it prices each team's
    chance of winning a decisive game. For example, 75.9% / 23.8% with a 0.3% tie becomes 76.1% / 23.9%,
    shown as −319 / +319. The two lines are always mirror images, and even money is shown as +100.
+7. Select **Compare book odds** to enter a sportsbook's moneyline for either team as quoted, vig included,
+   such as `-110` or `+150`. The dialog shows each bet's expected value (EV) in dollars per $100 staked at the
+   book's payout, assuming the fair two-way moneylines are exact and refunding the stake on a tie. The book's
+   vig is not removed, so it lowers the EV of both sides. A positive EV is shown in blue. Lines between −100
+   and +100 are rejected. Changing the teams, venue, or game type clears the entered lines.
 
 The model predicts outcomes, not scores. The uncertainty interval shows how precisely it estimates a
 team's win probability. Displayed percentages are rounded, so their sum can differ slightly from 100%.
-The moneylines are the model's fair prices, not betting advice or market odds.
+The moneylines are the model's fair prices, not betting advice or market odds, and the expected values are
+only as accurate as those prices.
 
 ### Follow the season
 

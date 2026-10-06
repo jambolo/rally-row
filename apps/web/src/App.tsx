@@ -7,6 +7,7 @@ import { hashChangeTarget, loadLeagueConfigs, localMonthDay, recordSwitch, start
 import { smallStore } from './small-store.ts';
 import { postseasonLabel, scheduleKey, scheduleOptions } from './schedule.ts';
 import { APP_VERSION } from './version.ts';
+import { BookOdds } from './BookOdds.tsx';
 
 const base = import.meta.env.BASE_URL;
 /** Absolute URL of a published site directory such as `config` or `data`. */
@@ -359,6 +360,14 @@ export default function App() {
                     <span className="bar-tie" style={{ width: percent(prediction.tie) }} />
                     <span className="bar-away" style={{ width: percent(prediction.away_win) }} />
                   </div>
+                  {twoWayLines.home !== null && twoWayLines.away !== null && (
+                    <BookOdds
+                      key={`${home}|${away}|${neutral}|${phase}`}
+                      home={{ name: teamName(home), fair: twoWayLines.home }}
+                      away={{ name: teamName(away), fair: twoWayLines.away }}
+                      tie={prediction.tie}
+                    />
+                  )}
                   <details className="prediction-note">
                     <summary>How certain is this estimate?</summary>
                     <p>

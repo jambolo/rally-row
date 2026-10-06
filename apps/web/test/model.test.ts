@@ -3,8 +3,10 @@ import {
   fitPosterior,
   formatTwoWayMoneyline,
   outcomeProbabilities,
+  parseMoneyline,
   predict,
   teamEstimates,
+  twoWayExpectedValue,
   twoWayMoneylines,
 } from '../src/model.ts';
 import { config, seed, game } from './helpers.ts';
@@ -120,5 +122,42 @@ describe('two-way moneyline', () => {
     expect(formatTwoWayMoneyline(150)).toBe('+150');
     expect(formatTwoWayMoneyline(-150)).toBe('-150');
     expect(formatTwoWayMoneyline(null)).toBe('—');
+  });
+});
+
+describe('book moneyline expected value', () => {
+  it('parses American moneylines', () => {
+    expect(parseMoneyline('-110')).toBe(-110);
+    expect(parseMoneyline('+150')).toBe(150);
+    expect(parseMoneyline(' 150 ')).toBe(150);
+    expect(parseMoneyline('−120')).toBe(-120);
+    expect(parseMoneyline('100')).toBe(100);
+    expect(parseMoneyline('-100')).toBe(-100);
+  });
+  it('rejects text that is not a moneyline', () => {
+    for (const text of ['', '99', '-99', '+0', 'abc', '-110.5', '+-110', '1e3', '9'.repeat(400)])
+      expect(parseMoneyline(text)).toBeNull();
+  });
+  it('is zero when the book matches the fair line', () => {
+    for (const line of [-319, -150, 100, 150, 319]) expect(twoWayExpectedValue(line, line, 0.003)).toBeCloseTo(0, 12);
+    expect(twoWayExpectedValue(-100, 100, 0)).toBeCloseTo(0, 12);
+  });
+  it('prices favorites and underdogs at the book line', () => {
+    // Fair -150 is a 60% decisive-game winner; +120 pays 1.2 units.
+    expect(twoWayExpectedValue(-150, 120, 0)).toBeCloseTo(0.6 * 1.2 - 0.4, 12);
+    // Fair +150 is a 40% winner; -110 pays 100/110 units.
+    expect(twoWayExpectedValue(150, -110, 0)).toBeCloseTo(0.4 * (100 / 110) - 0.6, 12);
+    // A coin flip at -110 loses the standard 4.55% vig.
+    expect(twoWayExpectedValue(100, -110, 0)).toBeCloseTo(-1 / 22, 12);
+  });
+  it('charges the vig on both sides of a market priced at the fair odds', () => {
+    // Fair -150 / +150 quoted by the book as -165 / +135.
+    expect(twoWayExpectedValue(-150, -165, 0)).toBeCloseTo(0.6 * (100 / 165) - 0.4, 12);
+    expect(twoWayExpectedValue(150, 135, 0)).toBeCloseTo(0.4 * 1.35 - 0.6, 12);
+    expect(twoWayExpectedValue(-150, -165, 0)).toBeLessThan(0);
+    expect(twoWayExpectedValue(150, 135, 0)).toBeLessThan(0);
+  });
+  it('scales by the chance the game is decisive because a tie is a push', () => {
+    expect(twoWayExpectedValue(-150, 120, 0.25)).toBeCloseTo(0.75 * 0.32, 12);
   });
 });

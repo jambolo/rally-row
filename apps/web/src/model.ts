@@ -42,6 +42,23 @@ export function twoWayMoneylines(p: Probabilities): { home: number | null; away:
 export function formatTwoWayMoneyline(line: number | null): string {
   return line === null ? '—' : line > 0 ? `+${line}` : `${line}`;
 }
+/** Parses an American moneyline such as `-110` or `+150`. Lines strictly between −100 and +100 do not exist. */
+export function parseMoneyline(text: string): number | null {
+  const normalized = text.trim().replace(/^−/, '-');
+  if (!/^[+-]?\d+$/.test(normalized)) return null;
+  const line = Number(normalized);
+  return Number.isFinite(line) && Math.abs(line) >= 100 ? line : null;
+}
+/**
+ * Expected profit per unit staked on one side of a two-way bet at the book's line, taking the fair line as the
+ * true price of a decisive game. The book's line includes its vig, which is not removed: the bet pays at the quoted
+ * price. A tie is a push that refunds the stake, so it scales the expectation by 1 − P(tie).
+ */
+export function twoWayExpectedValue(fairLine: number, bookLine: number, tie: number): number {
+  const p = fairLine < 0 ? -fairLine / (100 - fairLine) : 100 / (100 + fairLine);
+  const profit = bookLine < 0 ? -100 / bookLine : bookLine / 100;
+  return (1 - tie) * (p * profit - (1 - p));
+}
 function zeros(n: number) {
   return Array.from({ length: n }, () => Array<number>(n).fill(0));
 }
