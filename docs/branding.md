@@ -59,7 +59,7 @@ in headlines and the precision in the numbers. Let fans make their own call.
 | Updating | Updating the matchup picture. |
 | Update failure | We couldn't update the results. Your last saved predictions are still here. |
 
-Use ordinary language in the main experience. Explain model details where the user
+Use ordinary language in the main experience. Explain model details where fans
 can choose to read them. In introductory copy, prefer "chance of winning" to
 "win probability." Avoid taunts, dominance claims, betting slang, guarantees,
 and unsupported claims of superior prediction accuracy.
@@ -86,8 +86,8 @@ The supplied monochrome exports use pure black `#000000` or pure white `#FFFFFF`
 Use spacious, light content areas underneath a bold navy brand header. Color
 should emphasize choices and comparisons while keeping dense matchup information
 easy to read. Keep coral accents restrained. Use navy text on coral; verify final
-text/background combinations during implementation. Labels must carry meaning
-independently of color.
+text/background combinations during implementation. Labels must make sense
+without color.
 
 Typography: use **Barlow Condensed Bold (700)** for page and section headlines,
 upright and in sentence case. Use the existing Inter/system sans-serif stack for
@@ -105,21 +105,22 @@ small league labels, and restrained motion inspired by broadcast graphics.
 ## Product boundaries
 
 The current product provides probabilities, schedules/results, matchup comparisons,
-and team-strength estimates. The clubhouse personality is an emotional direction;
-it does not imply existing chat, hosted pools, leaderboards, or saved user picks.
+and team-strength estimates. The clubhouse personality sets the tone only; the product
+has no chat, hosted pools, leaderboards, or saved picks.
 
 Only promote leagues that are actually supported. Label concept data as illustrative.
-Do not suggest live scores or real-time predictions: current-season results have a
-deliberate eligibility delay. Model explanations must match the documented inputs;
-rosters, injuries, score margins, and betting markets are not used.
+Do not suggest live scores or real-time predictions: the app uses a result only after
+the game is final, and NFL results wait until the next day. Model explanations must
+match the documented inputs; rosters, injuries, score margins, and betting markets
+are not used.
 
 ## Review status
 
-The [visual concept](branding/rally-row-concept-v1.png) is a raster exploration,
-not a final vector logo or implemented interface. The concept image retains the earlier tagline,
-"Get a read. Make your call." Its display lettering predates the selected
-interface headline font. The Messaging and Typography guidance above governs
-current use.
+The [visual concept](branding/rally-row-concept-v1.png) is an early raster mockup;
+the production artwork replaces it. The concept image still shows the earlier tagline,
+"Get a read. Make your call.", and its display lettering predates the selected
+interface headline font. For current use, follow the messaging and typography
+guidance above.
 
 The [production artwork package](branding/production/README.md) provides outlined
 SVG logos, PNG exports, and favicon files using the selected tagline and primary
@@ -134,9 +135,9 @@ already taken. Alternate domain extensions were offered for registration at the
 time of that check. Exact
 U.S. federal word-mark searches returned no results, but related marks and public
 uses exist; trademark availability remains unresolved. Following this review,
-the user selected Rally Row as the final brand name on September 28, 2026.
+the maintainer chose Rally Row as the final brand name on September 28, 2026.
 
-## Interview decisions
+## Decision log
 
 - Audience: everyday sports fans and pool players who want straightforward help choosing winners.
 - Scope: NFL and MLB, with other sports leagues planned.
@@ -163,6 +164,6 @@ supporting copy, primary button label, visual direction, and interface headline
 typography are approved.
 The short description and methodology summary are approved.
 Production SVG and PNG artwork and derived favicon files are prepared. The web app
-incorporates the approved identity; repository and hosting names are managed separately.
+uses the approved identity. Repository and hosting names are decided separately.
 
 Updated September 28, 2026.

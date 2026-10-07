@@ -478,6 +478,81 @@ select {
 .bar-away {
   background: var(--coral);
 }
+.book-odds-open {
+  min-height: 44px;
+  margin-top: 16px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--blue-tint);
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 650;
+}
+.book-odds {
+  width: min(440px, calc(100% - 32px));
+  padding: 24px 28px;
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--blue);
+  border-radius: 8px;
+  background: white;
+  color: var(--navy);
+}
+.book-odds::backdrop {
+  background: rgb(16 27 45 / 0.55);
+}
+.book-odds h2 {
+  font-size: 30px;
+}
+.book-odds-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: 4px 14px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.book-odds-row label {
+  font-size: 14px;
+  font-weight: 650;
+}
+.book-odds-row small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.book-odds-row input {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--navy);
+  font-size: 16px;
+  text-align: right;
+}
+.book-odds-row output {
+  grid-column: 1 / -1;
+  font-size: 15px;
+  font-weight: 650;
+}
+.book-odds-row output.positive {
+  color: var(--blue);
+}
+.book-odds-close {
+  display: block;
+  min-height: 44px;
+  margin: 20px 0 0 auto;
+  padding: 10px 22px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--blue);
+  color: white;
+  font-size: 14px;
+  font-weight: 650;
+}
 .prediction-note {
   font-size: 12px;
   color: var(--muted);
@@ -669,6 +744,49 @@ abbr {
 .methodology a {
   color: var(--blue);
 }
+/* Postseason odds */
+.postseason-odds {
+  margin-top: 24px;
+}
+.postseason-odds h3 {
+  font-size: 18px;
+  margin: 24px 0 8px;
+}
+.postseason-odds .table-wrap {
+  max-height: none;
+}
+.odds-notes {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.odds-table th,
+.odds-table td {
+  padding: 10px 8px;
+  white-space: nowrap;
+}
+.odds-division {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+tr.playoff-line > * {
+  border-bottom: 2px dashed var(--coral);
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 footer {
   background: var(--navy);
   color: var(--canvas);
@@ -786,6 +904,10 @@ footer {
   }
   .game-list {
     max-height: 430px;
+  }
+  .odds-table th,
+  .odds-table td {
+    padding: 10px 6px;
   }
 }
 @media (max-width: 560px) {
@@ -945,6 +1067,13 @@ footer {
   .section-heading {
     flex-wrap: wrap;
     gap: 12px;
+  }
+  .postseason-odds h3 {
+    font-size: 16px;
+  }
+  .odds-table th,
+  .odds-table td {
+    padding: 8px 5px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -1,8 +1,9 @@
 use rating_core::{Game, LeagueConfig, parse_source, parse_source_with_warnings, replay_elo, validate_games};
 use serde_json::{Value, json};
+use test_support::{NFLVERSE_HEADER, league_config};
 
 fn config() -> LeagueConfig {
-    let mut cfg: LeagueConfig = serde_json::from_str(include_str!("../../../config/nfl.json")).unwrap();
+    let mut cfg = league_config("nfl");
     cfg.source.kind = "canonical-json".into();
     cfg
 }
@@ -129,8 +130,8 @@ fn rejects_missing_dates_invalid_zones_and_unrepresentable_midnight() {
 
 #[test]
 fn csv_missing_time_warns_and_serializes_utc() {
-    let cfg: LeagueConfig = serde_json::from_str(include_str!("../../../config/nfl.json")).unwrap();
-    let csv = "game_id,season,game_type,week,gameday,gametime,away_team,away_score,home_team,home_score,location\ng,2002,REG,1,2002-09-01,,SEA,10,SF,20,Home\n";
+    let cfg = league_config("nfl");
+    let csv = &format!("{NFLVERSE_HEADER}g,2002,REG,1,2002-09-01,,SEA,10,SF,20,Home\n");
     let mut warnings = Vec::new();
     let games = parse_source_with_warnings(csv, &cfg, |w| warnings.push(w)).unwrap();
     assert_eq!(warnings.len(), 1);

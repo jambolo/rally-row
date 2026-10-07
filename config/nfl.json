@@ -19,6 +19,7 @@
           "through_season": null,
           "name": "Arizona Cardinals",
           "location": "Arizona",
+          "division": "NFC-W",
           "source_ids": [
             "ARI"
           ]
@@ -35,6 +36,7 @@
           "through_season": null,
           "name": "Atlanta Falcons",
           "location": "Atlanta",
+          "division": "NFC-S",
           "source_ids": [
             "ATL"
           ]
@@ -51,6 +53,7 @@
           "through_season": null,
           "name": "Baltimore Ravens",
           "location": "Baltimore",
+          "division": "AFC-N",
           "source_ids": [
             "BAL"
           ]
@@ -67,6 +70,7 @@
           "through_season": null,
           "name": "Buffalo Bills",
           "location": "Buffalo",
+          "division": "AFC-E",
           "source_ids": [
             "BUF"
           ]
@@ -83,6 +87,7 @@
           "through_season": null,
           "name": "Carolina Panthers",
           "location": "Carolina",
+          "division": "NFC-S",
           "source_ids": [
             "CAR"
           ]
@@ -99,6 +104,7 @@
           "through_season": null,
           "name": "Chicago Bears",
           "location": "Chicago",
+          "division": "NFC-N",
           "source_ids": [
             "CHI"
           ]
@@ -115,6 +121,7 @@
           "through_season": null,
           "name": "Cincinnati Bengals",
           "location": "Cincinnati",
+          "division": "AFC-N",
           "source_ids": [
             "CIN"
           ]
@@ -131,6 +138,7 @@
           "through_season": null,
           "name": "Cleveland Browns",
           "location": "Cleveland",
+          "division": "AFC-N",
           "source_ids": [
             "CLE"
           ]
@@ -147,6 +155,7 @@
           "through_season": null,
           "name": "Dallas Cowboys",
           "location": "Dallas",
+          "division": "NFC-E",
           "source_ids": [
             "DAL"
           ]
@@ -163,6 +172,7 @@
           "through_season": null,
           "name": "Denver Broncos",
           "location": "Denver",
+          "division": "AFC-W",
           "source_ids": [
             "DEN"
           ]
@@ -179,6 +189,7 @@
           "through_season": null,
           "name": "Detroit Lions",
           "location": "Detroit",
+          "division": "NFC-N",
           "source_ids": [
             "DET"
           ]
@@ -195,6 +206,7 @@
           "through_season": null,
           "name": "Green Bay Packers",
           "location": "Green Bay",
+          "division": "NFC-N",
           "source_ids": [
             "GB"
           ]
@@ -211,6 +223,7 @@
           "through_season": null,
           "name": "Houston Texans",
           "location": "Houston",
+          "division": "AFC-S",
           "source_ids": [
             "HOU"
           ]
@@ -227,6 +240,7 @@
           "through_season": null,
           "name": "Indianapolis Colts",
           "location": "Indianapolis",
+          "division": "AFC-S",
           "source_ids": [
             "IND"
           ]
@@ -243,6 +257,7 @@
           "through_season": null,
           "name": "Jacksonville Jaguars",
           "location": "Jacksonville",
+          "division": "AFC-S",
           "source_ids": [
             "JAX",
             "JAC"
@@ -260,6 +275,7 @@
           "through_season": null,
           "name": "Kansas City Chiefs",
           "location": "Kansas City",
+          "division": "AFC-W",
           "source_ids": [
             "KC"
           ]
@@ -276,6 +292,7 @@
           "through_season": 2016,
           "name": "San Diego Chargers",
           "location": "San Diego",
+          "division": "AFC-W",
           "source_ids": [
             "SD"
           ]
@@ -285,6 +302,7 @@
           "through_season": null,
           "name": "Los Angeles Chargers",
           "location": "Los Angeles",
+          "division": "AFC-W",
           "source_ids": [
             "LAC"
           ]
@@ -301,6 +319,7 @@
           "through_season": 2015,
           "name": "St. Louis Rams",
           "location": "St. Louis",
+          "division": "NFC-W",
           "source_ids": [
             "STL"
           ]
@@ -310,6 +329,7 @@
           "through_season": null,
           "name": "Los Angeles Rams",
           "location": "Los Angeles",
+          "division": "NFC-W",
           "source_ids": [
             "LA",
             "LAR"
@@ -327,6 +347,7 @@
           "through_season": 2019,
           "name": "Oakland Raiders",
           "location": "Oakland",
+          "division": "AFC-W",
           "source_ids": [
             "OAK"
           ]
@@ -336,6 +357,7 @@
           "through_season": null,
           "name": "Las Vegas Raiders",
           "location": "Las Vegas",
+          "division": "AFC-W",
           "source_ids": [
             "LV"
           ]
@@ -352,6 +374,7 @@
           "through_season": null,
           "name": "Miami Dolphins",
           "location": "Miami",
+          "division": "AFC-E",
           "source_ids": [
             "MIA"
           ]
@@ -368,6 +391,7 @@
           "through_season": null,
           "name": "Minnesota Vikings",
           "location": "Minnesota",
+          "division": "NFC-N",
           "source_ids": [
             "MIN"
           ]
@@ -384,6 +408,7 @@
           "through_season": null,
           "name": "New England Patriots",
           "location": "New England",
+          "division": "AFC-E",
           "source_ids": [
             "NE"
           ]
@@ -400,6 +425,7 @@
           "through_season": null,
           "name": "New Orleans Saints",
           "location": "New Orleans",
+          "division": "NFC-S",
           "source_ids": [
             "NO"
           ]
@@ -416,6 +442,7 @@
           "through_season": null,
           "name": "New York Giants",
           "location": "New York",
+          "division": "NFC-E",
           "source_ids": [
             "NYG"
           ]
@@ -432,6 +459,7 @@
           "through_season": null,
           "name": "New York Jets",
           "location": "New York",
+          "division": "AFC-E",
           "source_ids": [
             "NYJ"
           ]
@@ -448,6 +476,7 @@
           "through_season": null,
           "name": "Philadelphia Eagles",
           "location": "Philadelphia",
+          "division": "NFC-E",
           "source_ids": [
             "PHI"
           ]
@@ -464,6 +493,7 @@
           "through_season": null,
           "name": "Pittsburgh Steelers",
           "location": "Pittsburgh",
+          "division": "AFC-N",
           "source_ids": [
             "PIT"
           ]
@@ -480,6 +510,7 @@
           "through_season": null,
           "name": "Seattle Seahawks",
           "location": "Seattle",
+          "division": "NFC-W",
           "source_ids": [
             "SEA"
           ]
@@ -496,6 +527,7 @@
           "through_season": null,
           "name": "San Francisco 49ers",
           "location": "San Francisco",
+          "division": "NFC-W",
           "source_ids": [
             "SF"
           ]
@@ -512,6 +544,7 @@
           "through_season": null,
           "name": "Tampa Bay Buccaneers",
           "location": "Tampa Bay",
+          "division": "NFC-S",
           "source_ids": [
             "TB"
           ]
@@ -528,6 +561,7 @@
           "through_season": null,
           "name": "Tennessee Titans",
           "location": "Tennessee",
+          "division": "AFC-S",
           "source_ids": [
             "TEN"
           ]
@@ -544,6 +578,7 @@
           "through_season": 2019,
           "name": "Washington Redskins",
           "location": "Washington",
+          "division": "NFC-E",
           "source_ids": [
             "WAS",
             "WSH"
@@ -554,6 +589,7 @@
           "through_season": 2021,
           "name": "Washington Football Team",
           "location": "Washington",
+          "division": "NFC-E",
           "source_ids": [
             "WAS",
             "WSH"
@@ -564,6 +600,7 @@
           "through_season": null,
           "name": "Washington Commanders",
           "location": "Washington",
+          "division": "NFC-E",
           "source_ids": [
             "WAS",
             "WSH"
@@ -603,6 +640,136 @@
     "postseason": {
       "start": "01-08",
       "end": "02-15"
+    }
+  },
+  "postseason": {
+    "conferences": [
+      {
+        "id": "AFC",
+        "name": "AFC",
+        "divisions": [
+          {
+            "id": "AFC-E",
+            "name": "AFC East",
+            "short": "East"
+          },
+          {
+            "id": "AFC-N",
+            "name": "AFC North",
+            "short": "North"
+          },
+          {
+            "id": "AFC-S",
+            "name": "AFC South",
+            "short": "South"
+          },
+          {
+            "id": "AFC-W",
+            "name": "AFC West",
+            "short": "West"
+          }
+        ]
+      },
+      {
+        "id": "NFC",
+        "name": "NFC",
+        "divisions": [
+          {
+            "id": "NFC-E",
+            "name": "NFC East",
+            "short": "East"
+          },
+          {
+            "id": "NFC-N",
+            "name": "NFC North",
+            "short": "North"
+          },
+          {
+            "id": "NFC-S",
+            "name": "NFC South",
+            "short": "South"
+          },
+          {
+            "id": "NFC-W",
+            "name": "NFC West",
+            "short": "West"
+          }
+        ]
+      }
+    ],
+    "teams_per_conference": 7,
+    "division_winners_first": true,
+    "reseed": true,
+    "rounds": [
+      {
+        "name": "Wild Card",
+        "short": "WC",
+        "round_label": "WC",
+        "pattern": "H",
+        "home": "higher_seed"
+      },
+      {
+        "name": "Divisional",
+        "short": "DIV",
+        "round_label": "DIV",
+        "pattern": "H",
+        "home": "higher_seed"
+      },
+      {
+        "name": "Conference Championship",
+        "short": "CON",
+        "round_label": "CON",
+        "pattern": "H",
+        "home": "higher_seed"
+      },
+      {
+        "name": "Super Bowl",
+        "short": "SB",
+        "round_label": "SB",
+        "pattern": "N",
+        "home": "better_record"
+      }
+    ],
+    "tiebreakers": {
+      "one_per_division": true,
+      "division": [
+        {
+          "rule": "head_to_head"
+        },
+        {
+          "rule": "division_record"
+        },
+        {
+          "rule": "common_games"
+        },
+        {
+          "rule": "conference_record"
+        },
+        {
+          "rule": "strength_of_victory"
+        },
+        {
+          "rule": "strength_of_schedule"
+        }
+      ],
+      "conference": [
+        {
+          "rule": "head_to_head_sweep"
+        },
+        {
+          "rule": "conference_record"
+        },
+        {
+          "rule": "common_games",
+          "min_games": 4
+        },
+        {
+          "rule": "strength_of_victory"
+        },
+        {
+          "rule": "strength_of_schedule"
+        }
+      ]
     }
   },
   "elo": {

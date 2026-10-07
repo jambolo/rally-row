@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { configSchema, displaySchema, gameFileSchema, gameSchema, seedSchema, validateGames } from './contracts.ts';
 import type { Posterior } from './model.ts';
+import type { PostseasonState } from './postseason.ts';
 import type { PublicState } from './service.ts';
 import type { Store } from './storage.ts';
 import { APP_VERSION } from './version.ts';
@@ -23,6 +24,51 @@ const prediction = z.object({
   tie: probability,
   home_probability_interval: z.tuple([probability, probability]),
 });
+const round = z.number().int().nonnegative();
+const count = z.number().int().nonnegative();
+const teamStatus = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('out') }),
+  z.object({ kind: z.literal('pending') }),
+  z.object({ kind: z.literal('qualified') }),
+  z.object({ kind: z.literal('bye') }),
+  z.object({ kind: z.literal('champion') }),
+  z.object({ kind: z.literal('series'), round, wins: count, losses: count, opponent: z.string() }),
+  z.object({ kind: z.literal('advanced'), round }),
+  z.object({ kind: z.literal('eliminated'), round }),
+]);
+export const postseasonStateSchema: z.ZodType<PostseasonState> = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('ready'),
+    mode: z.enum(['regular', 'postseason']),
+    simulations: z.number().int().positive(),
+    playoff_spots: z.number().int().positive(),
+    byes: count,
+    rounds: z.array(z.object({ name: z.string(), short: z.string(), games: z.number().int().positive() })),
+    conferences: z.array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        teams: z.array(
+          z.object({
+            id: z.string(),
+            division: z.string(),
+            division_label: z.string(),
+            record: z.object({ wins: count, losses: count, ties: count }),
+            mean_seed: finite.nullable(),
+            playoffs: probability,
+            win_division: probability,
+            bye: probability,
+            reach: z.array(probability),
+            title: probability,
+            status: teamStatus.nullable(),
+          }),
+        ),
+      }),
+    ),
+    notes: z.array(z.string()),
+  }),
+  z.object({ status: z.literal('error'), error: z.string() }),
+]);
 const snapshotSchema = z.object({
   app_version: z.literal(APP_VERSION),
   seed_sha256: z
@@ -72,6 +118,7 @@ const snapshotSchema = z.object({
     games: z.array(
       gameSchema.extend({ status: z.enum(['completed', 'scheduled', 'awaiting_result']), prediction: prediction.nullable() }),
     ),
+    postseason: postseasonStateSchema.nullable(),
   }),
 });
 
@@ -96,7 +143,8 @@ export function readSnapshot(store: Store | null, league: string): ModelSnapshot
       file.through_season !== state.season ||
       model.seed.target_season !== state.season ||
       file.source_url !== model.config.source.url ||
-      state.games.length !== file.games.length
+      state.games.length !== file.games.length ||
+      (state.postseason === null) !== (model.config.postseason === undefined)
     )
       return null;
     file.games = validateGames(file.games, model.config);

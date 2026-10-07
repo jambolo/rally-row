@@ -1,13 +1,13 @@
 # Rally Row production generation prompts
 
-Built-in image generation was used for refinement references. Final production
+An AI image generator produced the refinement references. The final production
 assets were rebuilt as vector paths because the generated transparent images
-contained edge artifacts. The navy-background treatment is primary.
+had edge artifacts. The navy-background treatment is primary.
 
-These prompts are historical records, not the current artwork specification.
-The initial refinement used the secondary navy-on-light treatment; the correction
-restored the primary off-white, blue, and coral treatment for navy backgrounds.
-Use [the production artwork notes](../README.md) for current color and typography roles.
+These prompts are kept for the record. For current color and typography roles, see
+[the production artwork notes](../README.md). The initial refinement used the
+secondary navy-on-light treatment; the correction restored the primary off-white,
+blue, and coral treatment for navy backgrounds.
 
 ## Initial refinement
 

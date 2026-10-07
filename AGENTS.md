@@ -43,7 +43,9 @@ Rust and Prettier both use a 132-column line width.
 ### Offline data pipeline (Rust)
 
 `crates/rating-core` is the shared library: config and data contracts (serde structs in `lib.rs`), source
-adapters, Elo replay, the Bayesian model, and tuning validation. The binaries in `apps/` are thin CLIs over it.
+adapters, Elo replay, the Bayesian model, tuning validation and the tuners' search and selection rule (`tuning.rs`),
+season-by-season prediction from earlier UTC dates (`walk_forward.rs`), and forecast scores (`scoring.rs`). The
+binaries in `apps/` are thin CLIs over it, so logic two tools share belongs in the library.
 
 1. `history-importer --league <id>` downloads the provider's history through the league's source adapter and
    writes `data/<id>/history.json`. It replaces the file only if every season is complete, so a failure leaves the
@@ -52,6 +54,8 @@ adapters, Elo replay, the Bayesian model, and tuning validation. The binaries in
    hashes of the config and history bytes. The browser and the backtest reject a seed whose hashes don't match,
    so rerun `elo-ratings` after any config or history change.
 3. `elo-tune` and `bayes-tune` are offline parameter searches. They never modify config.
+4. `evaluate-model` scores the model's predictions, made with the configured settings, on held-out seasons, which
+   tuning never uses. It compares Bayesian predictions with in-season Elo ratings.
 
 The custom `projectData` plugin in `apps/web/vite.config.ts` serves the root `config/` and `data/` directories
 in dev, and copies them into the build.
@@ -73,6 +77,8 @@ in dev, and copies them into the build.
   The worker posts back `PublicState`, the `Posterior`, and the store's entries, and the page persists them.
 - Matchup predictions are computed on the page from the returned `Posterior` (`predict` in `model.ts`, derived
   in `App.tsx` with `useMemo`, never stored).
+- Postseason odds are computed in the worker (`postseason.ts`, called from `service.ts`) and stored in the
+  snapshot. The page only renders them (`PostseasonOdds.tsx`).
 
 ### Invariants that span files
 
@@ -106,7 +112,7 @@ the CD workflow then tags them and merges `master` back into `develop`. Pages de
 ## Docs map
 
 - `README.md`: user-facing behavior of the app, described in detail. Keep it in sync with UI changes.
-- `DEVELOPMENT.md`: setup, CLI options, checks, releases, tuning, backtesting.
+- `DEVELOPMENT.md`: setup, CLI options, checks, releases, tuning, model evaluation, backtesting.
 - `docs/model.md`: statistical methodology (Elo, the Davidson–Bradley–Terry Bayesian model, two-way
-  moneylines, tuning).
+  moneylines, tuning, model evaluation).
 - `docs/extending.md`: adding leagues and source adapters, and the parity-fixture table.

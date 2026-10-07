@@ -22,18 +22,37 @@ export {
   fitPosterior,
   formatTwoWayMoneyline,
   outcomeProbabilities,
+  parseMoneyline,
   predict,
   teamEstimates,
+  twoWayExpectedValue,
   twoWayMoneylines,
   type Posterior,
   type Prediction,
   type Probabilities,
 } from './model.ts';
+export {
+  POSTSEASON_SIMULATIONS,
+  bracketOrder,
+  formatOdds,
+  formatRecord,
+  isListed,
+  postseasonState,
+  simulatePostseason,
+  statusText,
+  type PostseasonOdds,
+  type PostseasonState,
+  type SimulationGame,
+  type SimulationOptions,
+  type TeamOdds,
+  type TeamStatus,
+} from './postseason.ts';
 export { download, parseSource, usableResults } from './provider.ts';
 export { PredictionService, message, type GameView, type PublicState } from './service.ts';
 export { indexedDbPersistence, type Persistence } from './persistence.ts';
 export { rememberedLeagueKey, removeLegacyEntries, smallStore } from './small-store.ts';
 export { postseasonLabel, scheduleKey, scheduleOptions, type ScheduleUnit } from './schedule.ts';
+export { postseasonStateSchema } from './snapshot.ts';
 export {
   currentCacheKey,
   digest,

@@ -1,7 +1,7 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
-use rating_core::{GameFile, build_seed, load_league_config, lock, write_json};
-use std::{fs, path::PathBuf};
+use rating_core::{build_seed, load_history, load_league_config, lock, write_json};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(about = "Calculate historical Elo and save independent preseason priors")]
@@ -23,9 +23,7 @@ fn main() -> Result<()> {
     let season = args.target_season.unwrap_or(cfg.current_season());
     let dir = args.data_dir.join(&cfg.id);
     let _lock = lock(&dir.join("elo.lock"))?;
-    let history_bytes = fs::read(dir.join("history.json")).context("Read history.json; run history-importer first")?;
-    let history: GameFile = serde_json::from_slice(&history_bytes)
-        .context("Parse history.json; start_time_utc, numeric round, and round_label are required; rerun history-importer")?;
+    let (history, history_bytes) = load_history(&args.data_dir, &cfg)?;
     let seed = build_seed(&history, &history_bytes, &cfg, &config_bytes, season)?;
     let path = dir.join(format!("elo-{season}.json"));
     write_json(&path, &seed)?;

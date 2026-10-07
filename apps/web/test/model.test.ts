@@ -2,11 +2,20 @@ import { describe, it, expect } from 'vitest';
 import {
   fitPosterior,
   formatTwoWayMoneyline,
+  homeAdvantageLogit,
+  outcomeInto,
   outcomeProbabilities,
+  parseMoneyline,
+  posteriorSampler,
   predict,
   teamEstimates,
+  tieWeightIn,
+  twoWayExpectedValue,
   twoWayMoneylines,
+  type Posterior,
+  type Probabilities,
 } from '../src/model.ts';
+import { SIMULATION_SEED, normalSource, sfc32 } from '../src/random.ts';
 import { config, seed, game } from './helpers.ts';
 
 describe('Bayesian model', () => {
@@ -120,5 +129,189 @@ describe('two-way moneyline', () => {
     expect(formatTwoWayMoneyline(150)).toBe('+150');
     expect(formatTwoWayMoneyline(-150)).toBe('-150');
     expect(formatTwoWayMoneyline(null)).toBe('—');
+  });
+});
+
+describe('book moneyline expected value', () => {
+  it('parses American moneylines', () => {
+    expect(parseMoneyline('-110')).toBe(-110);
+    expect(parseMoneyline('+150')).toBe(150);
+    expect(parseMoneyline(' 150 ')).toBe(150);
+    expect(parseMoneyline('−120')).toBe(-120);
+    expect(parseMoneyline('100')).toBe(100);
+    expect(parseMoneyline('-100')).toBe(-100);
+  });
+  it('rejects text that is not a moneyline', () => {
+    for (const text of ['', '99', '-99', '+0', 'abc', '-110.5', '+-110', '1e3', '9'.repeat(400)])
+      expect(parseMoneyline(text)).toBeNull();
+  });
+  it('is zero when the book matches the fair line', () => {
+    for (const line of [-319, -150, 100, 150, 319]) expect(twoWayExpectedValue(line, line, 0.003)).toBeCloseTo(0, 12);
+    expect(twoWayExpectedValue(-100, 100, 0)).toBeCloseTo(0, 12);
+  });
+  it('prices favorites and underdogs at the book line', () => {
+    // Fair -150 is a 60% decisive-game winner; +120 pays 1.2 units.
+    expect(twoWayExpectedValue(-150, 120, 0)).toBeCloseTo(0.6 * 1.2 - 0.4, 12);
+    // Fair +150 is a 40% winner; -110 pays 100/110 units.
+    expect(twoWayExpectedValue(150, -110, 0)).toBeCloseTo(0.4 * (100 / 110) - 0.6, 12);
+    // A coin flip at -110 loses the standard 4.55% vig.
+    expect(twoWayExpectedValue(100, -110, 0)).toBeCloseTo(-1 / 22, 12);
+  });
+  it('charges the vig on both sides of a market priced at the fair odds', () => {
+    // Fair -150 / +150 quoted by the book as -165 / +135.
+    expect(twoWayExpectedValue(-150, -165, 0)).toBeCloseTo(0.6 * (100 / 165) - 0.4, 12);
+    expect(twoWayExpectedValue(150, 135, 0)).toBeCloseTo(0.4 * 1.35 - 0.6, 12);
+    expect(twoWayExpectedValue(-150, -165, 0)).toBeLessThan(0);
+    expect(twoWayExpectedValue(150, 135, 0)).toBeLessThan(0);
+  });
+  it('scales by the chance the game is decisive because a tie is a push', () => {
+    expect(twoWayExpectedValue(-150, 120, 0.25)).toBeCloseTo(0.75 * 0.32, 12);
+  });
+});
+
+// Verbatim pre-change implementation, kept as the bit-identity reference.
+function arraySoftmax(difference: number, tieWeight: number): Probabilities {
+  const logits = [difference / 2, -difference / 2, tieWeight > 0 ? Math.log(tieWeight) : -Infinity];
+  const max = Math.max(...logits),
+    weights = logits.map((v) => Math.exp(v - max));
+  const total = weights.reduce((a, b) => a + b, 0);
+  return {
+    home_win: weights[0] / total,
+    away_win: weights[1] / total,
+    tie: weights[2] / total,
+  };
+}
+
+const differences = [
+  -1e3,
+  -37.5,
+  -5,
+  -1,
+  -0.37,
+  -1e-9,
+  -0,
+  0,
+  1e-9,
+  0.37,
+  1,
+  5,
+  37.5,
+  1e3,
+  ...Array.from({ length: 81 }, (_, i) => (i - 40) * 0.173),
+];
+const tieWeights = [0, 1e-6, 0.003, 0.02, 0.25, 1, 3];
+const fields = ['home_win', 'away_win', 'tie'] as const;
+
+function mismatchesBetween(a: (d: number, nu: number) => Probabilities, b: (d: number, nu: number) => Probabilities) {
+  const mismatches: string[] = [];
+  for (const d of differences)
+    for (const nu of tieWeights) {
+      const x = a(d, nu),
+        y = b(d, nu);
+      for (const f of fields) if (!Object.is(x[f], y[f])) mismatches.push(`${d} ${nu} ${f}`);
+    }
+  return mismatches;
+}
+
+describe('simulation outcome math', () => {
+  it('outcomeInto is bit-identical to the array-based softmax', () => {
+    const mismatches = mismatchesBetween((d, nu) => outcomeInto(d, nu, { home_win: NaN, away_win: NaN, tie: NaN }), arraySoftmax);
+    expect(mismatches).toEqual([]);
+  });
+  it('outcomeProbabilities returns the outcomeInto values', () => {
+    const mismatches = mismatchesBetween(outcomeProbabilities, (d, nu) =>
+      outcomeInto(d, nu, { home_win: NaN, away_win: NaN, tie: NaN }),
+    );
+    expect(mismatches).toEqual([]);
+  });
+  it('outcomeInto fills and returns the given object', () => {
+    const out = { home_win: 0, away_win: 0, tie: 0 };
+    expect(outcomeInto(1e3, 0, out)).toBe(out);
+    expect(out).toEqual({ home_win: 1, away_win: 0, tie: 0 });
+    outcomeInto(-1e3, 0, out);
+    expect(out).toEqual({ home_win: 0, away_win: 1, tie: 0 });
+    outcomeInto(0, 0.02, out);
+    expect(out.home_win).toBe(out.away_win);
+    expect(out.home_win + out.away_win + out.tie).toBeCloseTo(1, 12);
+  });
+  it('homeAdvantageLogit converts Elo home advantage to logit units', () => {
+    expect(homeAdvantageLogit(config)).toBe(45 * (Math.LN10 / 400));
+  });
+  it('tieWeightIn allows ties only in configured phases', () => {
+    const model = fitPosterior(seed(), [], config);
+    expect(tieWeightIn(model, 'regular')).toBe(0.02);
+    expect(tieWeightIn(model, 'postseason')).toBe(0);
+  });
+});
+
+const posterior = (means: number[], covariance: number[][]): Posterior => ({
+  ids: means.map((_, i) => 'T' + i),
+  means,
+  covariance,
+  seed: seed(),
+  config,
+  games_used: 0,
+  iterations: 0,
+});
+
+describe('posterior sampler', () => {
+  it('posteriorSampler applies the Cholesky factor to normals in index order', () => {
+    const sample = posteriorSampler(
+      posterior(
+        [10, 20],
+        [
+          [4, 2],
+          [2, 5],
+        ],
+      ),
+    );
+    let calls = 0;
+    const out = new Float64Array(2);
+    expect(sample(() => ++calls, out)).toBe(out);
+    expect(Array.from(out)).toEqual([12, 25]);
+    expect(calls).toBe(2);
+    sample(() => 0, out);
+    expect(Array.from(out)).toEqual([10, 20]);
+  });
+  it('posteriorSampler matches the posterior mean and covariance', () => {
+    const means = [0.5, -0.2, 0.1],
+      covariance = [
+        [0.04, 0.012, -0.008],
+        [0.012, 0.09, 0.006],
+        [-0.008, 0.006, 0.025],
+      ];
+    const sample = posteriorSampler(posterior(means, covariance)),
+      normal = normalSource(sfc32(SIMULATION_SEED)),
+      out = new Float64Array(3),
+      N = 100_000,
+      sum = [0, 0, 0],
+      draws: number[][] = [];
+    for (let s = 0; s < N; s++) {
+      sample(normal, out);
+      draws.push(Array.from(out));
+      for (let i = 0; i < 3; i++) sum[i] += out[i];
+    }
+    const mean = sum.map((v) => v / N);
+    for (let i = 0; i < 3; i++) {
+      expect(Math.abs(mean[i] - means[i])).toBeLessThan(0.005);
+      for (let j = 0; j < 3; j++) {
+        let c = 0;
+        for (const x of draws) c += (x[i] - mean[i]) * (x[j] - mean[j]);
+        expect(Math.abs(c / N - covariance[i][j])).toBeLessThan(0.002);
+      }
+    }
+  });
+  it('posteriorSampler rejects a covariance that is not positive definite', () => {
+    expect(() =>
+      posteriorSampler(
+        posterior(
+          [0, 0],
+          [
+            [1, 2],
+            [2, 1],
+          ],
+        ),
+      ),
+    ).toThrow('Posterior precision is not positive definite');
   });
 });

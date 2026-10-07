@@ -21,7 +21,16 @@ function publish() {
   });
 }
 const service = (store: Store) =>
-  new PredictionService({ config, configHash, dataBase, season: 2026, now, store, fetchSource: async () => csv });
+  new PredictionService({
+    config,
+    configHash,
+    dataBase,
+    season: 2026,
+    postseasonSimulations: 200,
+    now,
+    store,
+    fetchSource: async () => csv,
+  });
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -54,7 +63,7 @@ it('refreshes a stale display vocabulary when reusing an unchanged model', async
   expect(readSnapshot(store, 'nfl')?.state).toMatchObject({ display: config.display, ties_allowed_in: ['regular'] });
 });
 
-it.each(['display', 'ties_allowed_in'])('discards a snapshot saved without %s', async (field) => {
+it.each(['display', 'ties_allowed_in', 'postseason'])('discards a snapshot saved without %s', async (field) => {
   publish();
   const store = memoryStore();
   await service(store).initialize();

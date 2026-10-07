@@ -46,6 +46,7 @@ async function setup({ withSnapshot = true } = {}) {
     configHash,
     dataBase: 'https://test/data',
     season: 2026,
+    postseasonSimulations: 200,
     store: built,
     fetchSource: async () => JSON.stringify({ schema_version: 2, league: 'nfl', games: [game()] }),
   });

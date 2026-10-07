@@ -20,11 +20,16 @@ identity ranges and aliases.
 - Team estimates resolve names and abbreviations from the model's target season. An era's abbreviation
   defaults to its first source id, so NFL eras omit it; MLB eras must set it, such as `MON` for the
   Montreal Expos and `WSH` for the Washington Nationals.
+- Division membership lives on eras: an era's optional `division` names a division id from the league's
+  [postseason format](extending.md#postseason-format). When `postseason` is configured, every team's
+  open-ended era must name one; older eras may omit it. A team that changes division gets a new era starting
+  with its first season in the new division, even when its name and location stay the same. The app's
+  franchise history merges consecutive eras with the same name and location, so such a split adds no row.
 
 ## Identity events
 
-Configured eras for franchises whose name or home market changed during the modeled history. An open-ended
-era runs through the current season.
+Configured eras for franchises whose name, home market, or division changed during the modeled history. An
+open-ended era runs through the current season.
 
 ### NFL
 
@@ -43,6 +48,7 @@ era runs through the current season.
 | `LAA` | `108` | `ANA`, then `LAA` | Anaheim Angels, Anaheim (1998–2004); Los Angeles Angels of Anaheim, Los Angeles (2005–2015); Los Angeles Angels, Los Angeles (2016–) |
 | `TB` | `139` | `TB` | Tampa Bay Devil Rays, Tampa Bay (1998–2007); Tampa Bay Rays, Tampa Bay (2008–) |
 | `MIA` | `146` | `FLA`, then `MIA` | Florida Marlins, Florida (1998–2011); Miami Marlins, Miami (2012–) |
+| `HOU` | `117` | `HOU` | Houston Astros, Houston, NL Central (1998–2012); Houston Astros, Houston, AL West (2013–) |
 | `CLE` | `114` | `CLE` | Cleveland Indians, Cleveland (1998–2021); Cleveland Guardians, Cleveland (2022–) |
 | `ATH` | `133` | `OAK`, then `ATH` | Oakland Athletics, Oakland (1998–2024); Athletics, Sacramento (2025–) |
 
@@ -52,7 +58,7 @@ The browser's current-season cache embeds the `teams` registry described in the
 [historical output format](extending.md#historical-output). The Elo seed contains ratings and
 configuration/history hashes, not a copy of the registry.
 
-The Elo calculator refuses historical files whose embedded identity registry differs from the active
+The Elo calculator rejects historical files whose embedded identity registry differs from the active
 configuration. Regeneration commands are in [Development](../DEVELOPMENT.md#data-and-configuration).
 
 ## Historical sources
@@ -76,7 +82,7 @@ configured MLB identity transitions:
   [2005](https://statsapi.mlb.com/api/v1/teams/120?season=2005); see also the
   [Montreal Expos history](https://en.wikipedia.org/wiki/Montreal_Expos).
 - Angels: the API reports the Anaheim Angels for [2004](https://statsapi.mlb.com/api/v1/teams/108?season=2004)
-  and "Los Angeles Angels" for 2005 and later; it does not carry the 2005–2015 name. The
+  and "Los Angeles Angels" for 2005 and later; it does not list the 2005–2015 name. The
   [Los Angeles Angels history](https://en.wikipedia.org/wiki/Los_Angeles_Angels) documents the 2005 rename
   to Los Angeles Angels of Anaheim and the 2016 rename to Los Angeles Angels.
 - Devil Rays to Rays: the API reports the Tampa Bay Devil Rays for

@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { it, expect } from 'vitest';
-import { configSchema, teamIdentity } from '../src/contracts.ts';
+import { configSchema, identityRuns, teamIdentity } from '../src/contracts.ts';
 import { parseSource } from '../src/provider.ts';
 import { config, seed } from './helpers.ts';
 import { fitPosterior, teamEstimates } from '../src/model.ts';
@@ -38,4 +39,39 @@ it('uses historical display names when evaluating an old season', () => {
   const row = teamEstimates(fitPosterior(s, [], config)).find((t) => t.id === 'LV')!;
   expect(row.name).toBe('Oakland Raiders');
   expect(row.abbreviation).toBe('OAK');
+});
+
+const team = (id: string) => config.teams.find((t) => t.id === id)!;
+
+it('merges HOU eras that differ only in division into one run', () => {
+  const mlb = configSchema.parse(JSON.parse(readFileSync(new URL('../../../config/mlb.json', import.meta.url)).toString()));
+  const hou = mlb.teams.find((t) => t.id === 'HOU')!;
+  expect(identityRuns(hou)).toEqual([{ from_season: 1998, through_season: null, name: 'Houston Astros', location: 'Houston' }]);
+});
+
+it('merges eras that differ only in division', () => {
+  const ari = structuredClone(team('ARI'));
+  const era = ari.eras[0]!;
+  ari.eras = [
+    { ...era, through_season: 2010, division: 'D1' },
+    { ...era, from_season: 2011, division: 'D2' },
+  ];
+  expect(identityRuns(ari)).toEqual([
+    { from_season: era.from_season, through_season: null, name: era.name, location: era.location },
+  ]);
+});
+
+it('keeps WAS renames as three runs', () => {
+  expect(identityRuns(team('WAS')).map((r) => r.name)).toEqual([
+    'Washington Redskins',
+    'Washington Football Team',
+    'Washington Commanders',
+  ]);
+});
+
+it('keeps LV relocation as two runs', () => {
+  expect(identityRuns(team('LV')).map((r) => [r.from_season, r.through_season, r.location])).toEqual([
+    [2002, 2019, 'Oakland'],
+    [2020, null, 'Las Vegas'],
+  ]);
 });

@@ -1,11 +1,10 @@
 use rating_core::{Game, LeagueConfig, Outcome, adapter_for, load_league_config, parse_documents};
 use serde_json::{Value, json};
 use std::path::Path;
-
-const CONFIG_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../config");
+use test_support::{CONFIG_DIR, league_config};
 
 fn mlb() -> LeagueConfig {
-    serde_json::from_str(include_str!("../../../config/mlb.json")).unwrap()
+    league_config("mlb")
 }
 
 fn fixture() -> Value {

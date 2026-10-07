@@ -1,29 +1,34 @@
 use std::process::{Command, Output};
+use test_support::{
+    CONFIG_DIR,
+    cli::{assert_contains, assert_requires_league},
+};
+
+const BIN: &str = env!("CARGO_BIN_EXE_elo-ratings");
 
 fn run(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_elo-ratings")).args(args).output().unwrap()
+    Command::new(BIN).args(args).output().unwrap()
 }
 
 #[test]
 fn cli_requires_league() {
-    let output = run(&[]);
-    assert_eq!(output.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("--league <LEAGUE>"));
+    assert_requires_league(BIN);
 }
 
 #[test]
 fn cli_rejects_unsafe_league_ids() {
     let output = run(&["--league", "NFL/../x"]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("Unsafe league id"));
+    assert_contains(&String::from_utf8_lossy(&output.stderr), "Unsafe league id");
 }
 
 #[test]
 fn cli_reads_the_league_config_from_config_dir() {
-    let config_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../config");
     let data_dir = concat!(env!("CARGO_TARGET_TMPDIR"), "/elo-ratings-cli-without-history");
-    let output = run(&["--league", "nfl", "--config-dir", config_dir, "--data-dir", data_dir]);
+    let output = run(&["--league", "nfl", "--config-dir", CONFIG_DIR, "--data-dir", data_dir]);
     assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("Read history.json; run history-importer first"), "{stderr}");
+    assert_contains(
+        &String::from_utf8_lossy(&output.stderr),
+        "Read history.json; run history-importer first",
+    );
 }

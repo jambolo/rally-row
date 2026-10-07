@@ -1,14 +1,17 @@
 use rating_core::*;
+use test_support::{NFLVERSE_HEADER, history_file, league_config};
 
 fn config() -> LeagueConfig {
-    serde_json::from_str(include_str!("../../../config/nfl.json")).unwrap()
+    league_config("nfl")
 }
-fn csv() -> &'static str {
-    "game_id,season,game_type,week,gameday,gametime,away_team,away_score,home_team,home_score,location\na,2002,REG,1,2002-09-01,13:00,SD,10,OAK,10,Neutral\nb,2002,REG,2,2002-09-08,,STL,,SEA,,Home\nc,2002,PRE,1,2002-08-01,13:00,SEA,7,SF,3,Home\n"
+fn csv() -> String {
+    format!(
+        "{NFLVERSE_HEADER}a,2002,REG,1,2002-09-01,13:00,SD,10,OAK,10,Neutral\nb,2002,REG,2,2002-09-08,,STL,,SEA,,Home\nc,2002,PRE,1,2002-08-01,13:00,SEA,7,SF,3,Home\n"
+    )
 }
 #[test]
 fn normalizes_franchises_ties_and_unplayed_games() {
-    let games = parse_source(csv(), &config()).unwrap();
+    let games = parse_source(&csv(), &config()).unwrap();
     assert_eq!(games.len(), 2);
     assert_eq!(games[0].home_team, "LV");
     assert_eq!(games[0].away_team, "LAC");
@@ -23,7 +26,7 @@ fn normalizes_franchises_ties_and_unplayed_games() {
 #[test]
 fn rejects_duplicate_games_bad_dates_and_one_missing_score() {
     let cfg = config();
-    let mut games = parse_source(csv(), &cfg).unwrap();
+    let mut games = parse_source(&csv(), &cfg).unwrap();
     games.push(games[0].clone());
     assert!(validate_games(&mut games, &cfg).is_err());
     assert!(parse_source(&csv().replace("OAK,10", "OAK,"), &cfg).is_err());
@@ -34,18 +37,9 @@ fn seeds_are_chronological_tie_aware_and_regressed_exactly_once() {
     let mut cfg = config();
     cfg.elo.k = 20.0;
     cfg.elo.offseason_regression = 1.0 / 3.0;
-    let mut games = parse_source(csv(), &cfg).unwrap();
+    let mut games = parse_source(&csv(), &cfg).unwrap();
     games[0].result = Some(Outcome::HomeWin);
-    let history = GameFile {
-        schema_version: HISTORY_SCHEMA_VERSION,
-        league: "nfl".into(),
-        fetched_at: "2026-01-01T00:00:00Z".into(),
-        source_url: cfg.source.url.clone(),
-        from_season: 2002,
-        through_season: 2002,
-        teams: cfg.teams.clone(),
-        games: games.clone(),
-    };
+    let history = history_file(&cfg, 2002..=2002, games.clone());
     let bytes = serde_json::to_vec(&history).unwrap();
     let seed = build_seed(&history, &bytes, &cfg, b"config", 2003).unwrap();
     let lv = seed.ratings.iter().find(|t| t.team == "LV").unwrap();
@@ -76,7 +70,7 @@ fn seeds_are_chronological_tie_aware_and_regressed_exactly_once() {
 #[test]
 fn postseason_ties_are_invalid() {
     let cfg = config();
-    let mut games = parse_source(csv(), &cfg).unwrap();
+    let mut games = parse_source(&csv(), &cfg).unwrap();
     games[0].phase = "postseason".into();
     assert!(validate_games(&mut games, &cfg).is_err());
 }
@@ -85,7 +79,7 @@ fn generic_json_adapter_has_no_nfl_team_count_dependency() {
     let mut cfg = config();
     cfg.id = "demo".into();
     cfg.source.kind = "canonical-json".into();
-    let mut games = parse_source(csv(), &config()).unwrap();
+    let mut games = parse_source(&csv(), &config()).unwrap();
     for g in &mut games {
         g.league = "demo".into();
     }
@@ -126,21 +120,14 @@ fn identity_ranges_track_names_and_locations() {
 fn relocation_preserves_one_rating_history_and_original_source_ids() {
     let mut cfg = config();
     cfg.history_start = 2019;
-    let input = "game_id,season,game_type,week,gameday,gametime,away_team,away_score,home_team,home_score,location\na,2019,REG,1,2019-09-01,13:00,SEA,10,OAK,20,Neutral\nb,2020,REG,1,2020-09-01,13:00,SEA,10,LV,20,Neutral\n";
+    let input = &format!(
+        "{NFLVERSE_HEADER}a,2019,REG,1,2019-09-01,13:00,SEA,10,OAK,20,Neutral\nb,2020,REG,1,2020-09-01,13:00,SEA,10,LV,20,Neutral\n"
+    );
     let games = parse_source(input, &cfg).unwrap();
     assert_eq!(games[0].home_team, games[1].home_team);
     assert_eq!(games[0].home_source_id, "OAK");
     assert_eq!(games[1].home_source_id, "LV");
-    let history = GameFile {
-        schema_version: HISTORY_SCHEMA_VERSION,
-        league: "nfl".into(),
-        fetched_at: "2021-03-01T00:00:00Z".into(),
-        source_url: cfg.source.url.clone(),
-        from_season: 2019,
-        through_season: 2020,
-        teams: cfg.teams.clone(),
-        games,
-    };
+    let history = history_file(&cfg, 2019..=2020, games);
     let output = build_seed(&history, b"history", &cfg, b"config", 2021).unwrap();
     let team = output.ratings.iter().find(|t| t.team == "LV").unwrap();
     assert_eq!(team.games, 2);
@@ -154,7 +141,7 @@ fn elo_replay_scores_before_updates_and_regresses_only_at_boundaries() {
     let mut cfg = config();
     cfg.elo.k = 20.0;
     cfg.elo.offseason_regression = 0.5;
-    let mut games = parse_source(csv(), &cfg).unwrap();
+    let mut games = parse_source(&csv(), &cfg).unwrap();
     games[0].result = Some(Outcome::HomeWin);
     let mut next = games[0].clone();
     next.id = "next-season".into();

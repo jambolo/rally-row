@@ -1,12 +1,19 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { LeagueConfig } from '../src/contracts.ts';
 import { indexedDbPersistence } from '../src/persistence.ts';
+import * as postseason from '../src/postseason.ts';
 import { refresh, type RefreshMessage, type RefreshRequest } from '../src/refresh-worker.ts';
 import type { SessionView } from '../src/session.ts';
 import { readSnapshot, snapshotKey } from '../src/snapshot.ts';
 import { digest, memoryStore } from '../src/storage.ts';
 import { fakeIndexedDb } from './fake-indexeddb.ts';
 import { config, configBytes, historyBytes, seed } from './helpers.ts';
+
+// refresh() always runs the production simulation count; these multi-refresh tests only need the odds to exist.
+const simulatePostseason = postseason.simulatePostseason;
+vi.spyOn(postseason, 'simulatePostseason').mockImplementation((model, games) =>
+  simulatePostseason(model, games, { simulations: 200 }),
+);
 
 const stops: (() => void)[] = [];
 const csv =

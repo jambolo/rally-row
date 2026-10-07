@@ -76,7 +76,16 @@ const games = [
   entry(5, '2026-05-20', '2026-05-20T23:05:00Z', 'Scheduled', [147], [111]),
 ];
 const service = (now: string, store: Store | null = memoryStore(), fetchSource = async () => schedule(games)) =>
-  new PredictionService({ config, configHash, dataBase, season: 2026, now: () => new Date(now), store, fetchSource });
+  new PredictionService({
+    config,
+    configHash,
+    dataBase,
+    season: 2026,
+    postseasonSimulations: 200,
+    now: () => new Date(now),
+    store,
+    fetchSource,
+  });
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -157,6 +166,7 @@ it('persists nothing when the store option is omitted', async () => {
     configHash,
     dataBase,
     season: 2026,
+    postseasonSimulations: 200,
     now: () => new Date('2026-05-03T12:00:00Z'),
     fetchSource: async () => schedule(games),
   });
@@ -164,4 +174,11 @@ it('persists nothing when the store option is omitted', async () => {
   expect(s.getState().status).toBe('ready');
   for (const method of [storage.getItem, storage.setItem, storage.removeItem, storage.key, storage.clear])
     expect(method).not.toHaveBeenCalled();
+});
+
+it('publishes postseason odds in the MLB service state', async () => {
+  publish();
+  const s = service('2026-05-03T12:00:00Z');
+  await s.initialize();
+  expect(s.getState()).toMatchObject({ status: 'ready', postseason: { status: 'ready', mode: 'regular' } });
 });

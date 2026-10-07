@@ -32,7 +32,16 @@ function publish() {
   });
 }
 const service = (store: Store, leagueConfig: LeagueConfig, fetchSource: (url: string) => Promise<string>) =>
-  new PredictionService({ config: leagueConfig, configHash, dataBase, season: 2026, now, store, fetchSource });
+  new PredictionService({
+    config: leagueConfig,
+    configHash,
+    dataBase,
+    season: 2026,
+    postseasonSimulations: 200,
+    now,
+    store,
+    fetchSource,
+  });
 
 afterEach(() => {
   vi.unstubAllGlobals();

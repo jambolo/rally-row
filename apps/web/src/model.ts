@@ -14,17 +14,27 @@ export type Posterior = {
   iterations: number;
 };
 
+/**
+ * Allocation-free form of `outcomeProbabilities` for simulation loops. The operations run in the same order, so the
+ * results are bit-identical.
+ */
+export function outcomeInto(difference: number, tieWeight: number, out: Probabilities): Probabilities {
+  const l0 = difference / 2,
+    l1 = -difference / 2,
+    l2 = tieWeight > 0 ? Math.log(tieWeight) : -Infinity;
+  const max = Math.max(l0, l1, l2);
+  const w0 = Math.exp(l0 - max),
+    w1 = Math.exp(l1 - max),
+    w2 = Math.exp(l2 - max);
+  const total = w0 + w1 + w2;
+  out.home_win = w0 / total;
+  out.away_win = w1 / total;
+  out.tie = w2 / total;
+  return out;
+}
 /** Davidson extension of Bradley–Terry. Softmax keeps extreme matchups stable. */
 export function outcomeProbabilities(difference: number, tieWeight: number): Probabilities {
-  const logits = [difference / 2, -difference / 2, tieWeight > 0 ? Math.log(tieWeight) : -Infinity];
-  const max = Math.max(...logits),
-    weights = logits.map((v) => Math.exp(v - max));
-  const total = weights.reduce((a, b) => a + b, 0);
-  return {
-    home_win: weights[0] / total,
-    away_win: weights[1] / total,
-    tie: weights[2] / total,
-  };
+  return outcomeInto(difference, tieWeight, { home_win: 0, away_win: 0, tie: 0 });
 }
 /**
  * Fair (no-vig) two-way American moneylines: the favorite is negative, the underdog positive.
@@ -41,6 +51,23 @@ export function twoWayMoneylines(p: Probabilities): { home: number | null; away:
 }
 export function formatTwoWayMoneyline(line: number | null): string {
   return line === null ? '—' : line > 0 ? `+${line}` : `${line}`;
+}
+/** Parses an American moneyline such as `-110` or `+150`. Lines strictly between −100 and +100 do not exist. */
+export function parseMoneyline(text: string): number | null {
+  const normalized = text.trim().replace(/^−/, '-');
+  if (!/^[+-]?\d+$/.test(normalized)) return null;
+  const line = Number(normalized);
+  return Number.isFinite(line) && Math.abs(line) >= 100 ? line : null;
+}
+/**
+ * Expected profit per unit staked on one side of a two-way bet at the book's line, taking the fair line as the
+ * true price of a decisive game. The book's line includes its vig, which is not removed: the bet pays at the quoted
+ * price. A tie is a push that refunds the stake, so it scales the expectation by 1 − P(tie).
+ */
+export function twoWayExpectedValue(fairLine: number, bookLine: number, tie: number): number {
+  const p = fairLine < 0 ? -fairLine / (100 - fairLine) : 100 / (100 + fairLine);
+  const profit = bookLine < 0 ? -100 / bookLine : bookLine / 100;
+  return (1 - tie) * (p * profit - (1 - p));
 }
 function zeros(n: number) {
   return Array.from({ length: n }, () => Array<number>(n).fill(0));
@@ -249,4 +276,33 @@ export function teamEstimates(model: Posterior) {
       };
     })
     .sort((a, b) => b.rating - a.rating);
+}
+
+/** Same grouping as `fitPosterior` and `predict` (`home_advantage * factor`), so simulated games match their rounding. */
+export function homeAdvantageLogit(config: LeagueConfig): number {
+  return config.elo.home_advantage * (Math.LN10 / config.elo.scale);
+}
+export function tieWeightIn(model: Posterior, phase: Game['phase']): number {
+  return model.config.ties_allowed_in.includes(phase) ? model.seed.tie_weight : 0;
+}
+/**
+ * Draws team strengths from the posterior: `means + L z` with `L` the Cholesky factor of the covariance and `z` standard
+ * normals. The factor is computed once and buffers are reused, so draws allocate nothing.
+ */
+export function posteriorSampler(model: Posterior): (normal: () => number, out: Float64Array) => Float64Array {
+  const n = model.means.length,
+    l = cholesky(model.covariance),
+    means = Float64Array.from(model.means),
+    factor = new Float64Array(n * n),
+    z = new Float64Array(n);
+  for (let i = 0; i < n; i++) for (let k = 0; k <= i; k++) factor[i * n + k] = l[i][k];
+  return (normal, out) => {
+    for (let i = 0; i < n; i++) z[i] = normal();
+    for (let i = 0; i < n; i++) {
+      let v = means[i];
+      for (let k = 0; k <= i; k++) v += factor[i * n + k] * z[k];
+      out[i] = v;
+    }
+    return out;
+  };
 }

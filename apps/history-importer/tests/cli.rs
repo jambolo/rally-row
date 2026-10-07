@@ -1,14 +1,33 @@
 use serde_json::{Value, json};
-use std::{fs, process::Command};
+use std::{fs, path::Path, process::Command};
+use test_support::{
+    NFLVERSE_HEADER,
+    cli::{assert_contains, assert_requires_league},
+    league_config_json,
+};
+
+const BIN: &str = env!("CARGO_BIN_EXE_history-importer");
+
+/// An import of `league` through `through_season`, reading the config from and writing history under `dir`; callers
+/// add `--input` files.
+fn importer(dir: &Path, league: &str, through_season: &str) -> Command {
+    let mut command = Command::new(BIN);
+    command
+        .args(["--league", league, "--config-dir"])
+        .arg(dir)
+        .arg("--data-dir")
+        .arg(dir)
+        .args(["--through-season", through_season]);
+    command
+}
 
 #[test]
 fn importer_warns_writes_utc_and_keeps_existing_history_on_missing_date() {
     let dir = tempfile::tempdir().unwrap();
-    let config_path = dir.path().join("nfl.json");
     let source_path = dir.path().join("source.json");
-    let mut cfg: Value = serde_json::from_str(include_str!("../../../config/nfl.json")).unwrap();
+    let mut cfg = league_config_json("nfl");
     cfg["source"]["kind"] = json!("canonical-json");
-    fs::write(&config_path, cfg.to_string()).unwrap();
+    fs::write(dir.path().join("nfl.json"), cfg.to_string()).unwrap();
     let mut source = json!({"schema_version": 2, "league": "nfl", "games": [{
         "id": "missing-time", "league": "nfl", "season": 2002, "date": "2002-09-01", "time": null,
         "timezone": "America/New_York", "phase": "regular", "round_label": "REG", "round": 1,
@@ -23,23 +42,18 @@ fn importer_warns_writes_utc_and_keeps_existing_history_on_missing_date() {
     source["games"].as_array_mut().unwrap().push(ambiguous);
     fs::write(&source_path, source.to_string()).unwrap();
     let run = || {
-        Command::new(env!("CARGO_BIN_EXE_history-importer"))
-            .args(["--league", "nfl", "--config-dir"])
-            .arg(dir.path())
+        importer(dir.path(), "nfl", "2002")
             .arg("--input")
             .arg(&source_path)
-            .arg("--data-dir")
-            .arg(dir.path())
-            .args(["--through-season", "2002"])
             .output()
             .unwrap()
     };
     let output = run();
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert!(output.status.success(), "{stderr}");
-    assert!(stderr.contains("Warning: Game missing-time: missing time"));
-    assert!(stderr.contains("Warning: Game ambiguous-time: ambiguous local time"));
-    assert!(stderr.contains("earlier occurrence"));
+    assert_contains(&stderr, "Warning: Game missing-time: missing time");
+    assert_contains(&stderr, "Warning: Game ambiguous-time: ambiguous local time");
+    assert_contains(&stderr, "earlier occurrence");
     let history_path = dir.path().join("nfl/history.json");
     let saved = fs::read(&history_path).unwrap();
     let history: Value = serde_json::from_slice(&saved).unwrap();
@@ -57,10 +71,9 @@ fn importer_warns_writes_utc_and_keeps_existing_history_on_missing_date() {
     fs::write(&source_path, source.to_string()).unwrap();
     let output = run();
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8(output.stderr)
-            .unwrap()
-            .contains("Missing source date for game missing-time")
+    assert_contains(
+        &String::from_utf8(output.stderr).unwrap(),
+        "Missing source date for game missing-time",
     );
     assert_eq!(fs::read(history_path).unwrap(), saved);
 }
@@ -68,76 +81,60 @@ fn importer_warns_writes_utc_and_keeps_existing_history_on_missing_date() {
 #[test]
 fn importer_requires_a_completed_super_bowl_and_keeps_history_otherwise() {
     let dir = tempfile::tempdir().unwrap();
-    let config_path = dir.path().join("nfl.json");
     let source_path = dir.path().join("games.csv");
-    fs::write(&config_path, include_str!("../../../config/nfl.json")).unwrap();
-    let header = "game_id,season,game_type,week,gameday,gametime,away_team,away_score,home_team,home_score,location\n";
+    fs::write(dir.path().join("nfl.json"), league_config_json("nfl").to_string()).unwrap();
     let regular = "reg,2002,REG,1,2002-09-08,13:00,SF,10,SEA,20,Home\n";
     let super_bowl = "sb,2002,SB,21,2003-01-26,18:25,OAK,21,TB,48,Neutral\n";
     let run = |csv: String| {
         fs::write(&source_path, csv).unwrap();
-        Command::new(env!("CARGO_BIN_EXE_history-importer"))
-            .args(["--league", "nfl", "--config-dir"])
-            .arg(dir.path())
+        importer(dir.path(), "nfl", "2002")
             .arg("--input")
             .arg(&source_path)
-            .arg("--data-dir")
-            .arg(dir.path())
-            .args(["--through-season", "2002"])
             .output()
             .unwrap()
     };
-    let output = run(format!("{header}{regular}{super_bowl}"));
+    let output = run(format!("{NFLVERSE_HEADER}{regular}{super_bowl}"));
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let history_path = dir.path().join("nfl/history.json");
     let saved = fs::read(&history_path).unwrap();
     let history: Value = serde_json::from_slice(&saved).unwrap();
     assert_eq!(history["games"].as_array().unwrap().len(), 2);
-    let output = run(format!("{header}{regular}"));
+    let output = run(format!("{NFLVERSE_HEADER}{regular}"));
     assert!(!output.status.success());
-    assert!(
-        String::from_utf8(output.stderr)
-            .unwrap()
-            .contains("Season 2002 has no completed Super Bowl; previous file has been kept")
+    assert_contains(
+        &String::from_utf8(output.stderr).unwrap(),
+        "Season 2002 has no completed Super Bowl; previous file has been kept",
     );
     assert_eq!(fs::read(history_path).unwrap(), saved);
 }
 
 #[test]
 fn cli_requires_league() {
-    let output = Command::new(env!("CARGO_BIN_EXE_history-importer")).output().unwrap();
-    assert_eq!(output.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("--league <LEAGUE>"));
+    assert_requires_league(BIN);
 }
 
 #[test]
 fn importer_rejects_two_files_for_a_single_document_source() {
     let dir = tempfile::tempdir().unwrap();
-    fs::write(dir.path().join("nfl.json"), include_str!("../../../config/nfl.json")).unwrap();
-    let csv = "game_id,season,game_type,week,gameday,gametime,away_team,away_score,home_team,home_score,location\n\
-               reg,2002,REG,1,2002-09-08,13:00,SF,10,SEA,20,Home\n\
-               sb,2002,SB,21,2003-01-26,18:25,OAK,21,TB,48,Neutral\n";
+    fs::write(dir.path().join("nfl.json"), league_config_json("nfl").to_string()).unwrap();
+    let csv = format!(
+        "{NFLVERSE_HEADER}reg,2002,REG,1,2002-09-08,13:00,SF,10,SEA,20,Home\n\
+         sb,2002,SB,21,2003-01-26,18:25,OAK,21,TB,48,Neutral\n"
+    );
     let (first, second) = (dir.path().join("a.csv"), dir.path().join("b.csv"));
-    fs::write(&first, csv).unwrap();
-    fs::write(&second, csv).unwrap();
+    fs::write(&first, &csv).unwrap();
+    fs::write(&second, &csv).unwrap();
     for repeated_flag in [false, true] {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_history-importer"));
-        command
-            .args(["--league", "nfl", "--config-dir"])
-            .arg(dir.path())
-            .arg("--data-dir")
-            .arg(dir.path())
-            .args(["--through-season", "2002", "--input"])
-            .arg(&first);
+        let mut command = importer(dir.path(), "nfl", "2002");
+        command.arg("--input").arg(&first);
         if repeated_flag {
             command.arg("--input");
         }
         let output = command.arg(&second).output().unwrap();
         assert!(!output.status.success());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            stderr.contains("The nflverse-csv adapter expects exactly one document, got 2"),
-            "{stderr}"
+        assert_contains(
+            &String::from_utf8_lossy(&output.stderr),
+            "The nflverse-csv adapter expects exactly one document, got 2",
         );
         assert!(!dir.path().join("nfl/history.json").exists());
     }
@@ -146,20 +143,15 @@ fn importer_rejects_two_files_for_a_single_document_source() {
 #[test]
 fn importer_reads_one_file_per_season_and_requires_a_completed_world_series() {
     let dir = tempfile::tempdir().unwrap();
-    let mut cfg: Value = serde_json::from_str(include_str!("../../../config/mlb.json")).unwrap();
+    let mut cfg = league_config_json("mlb");
     cfg["history_start"] = json!(2025);
     fs::write(dir.path().join("mlb.json"), cfg.to_string()).unwrap();
     let fixture: Value =
         serde_json::from_str(include_str!("../../../crates/rating-core/tests/fixtures/mlb-statsapi.json")).unwrap();
     let documents = fixture["documents"].as_array().unwrap().clone();
     let run = |documents: &[Value]| {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_history-importer"));
-        command
-            .args(["--league", "mlb", "--config-dir"])
-            .arg(dir.path())
-            .arg("--data-dir")
-            .arg(dir.path())
-            .args(["--through-season", "2025", "--input"]);
+        let mut command = importer(dir.path(), "mlb", "2025");
+        command.arg("--input");
         for (i, document) in documents.iter().enumerate() {
             let path = dir.path().join(format!("schedule-{i}.json"));
             fs::write(&path, document.to_string()).unwrap();
@@ -169,7 +161,7 @@ fn importer_reads_one_file_per_season_and_requires_a_completed_world_series() {
     };
     let output = run(&documents);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert!(String::from_utf8_lossy(&output.stdout).contains("Saved 10 games, seasons 2025–2025"));
+    assert_contains(&String::from_utf8_lossy(&output.stdout), "Saved 10 games, seasons 2025–2025");
     let history_path = dir.path().join("mlb/history.json");
     let saved = fs::read(&history_path).unwrap();
     let history: Value = serde_json::from_slice(&saved).unwrap();
@@ -197,10 +189,9 @@ fn importer_reads_one_file_per_season_and_requires_a_completed_world_series() {
         .collect();
     let output = run(&without_world_series);
     assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("Season 2025 has no completed World Series; previous file has been kept"),
-        "{stderr}"
+    assert_contains(
+        &String::from_utf8_lossy(&output.stderr),
+        "Season 2025 has no completed World Series; previous file has been kept",
     );
     assert_eq!(fs::read(history_path).unwrap(), saved);
 }

@@ -62,23 +62,23 @@ Inter comes from this package's source files.
 - Keep at least one quarter of the mark's height clear around visible artwork. Add surrounding space where a supplied crop is tighter.
 - Use the horizontal logo without its tagline below 360 pixels wide. Use the standalone mark below 160 pixels wide.
 - Keep the logo's proportions, row spacing, colors, and lettering fixed. Avoid shadows, gradients, outlines, and rearranged rows.
-- Use the SVG master for print layout. The supplied files use RGB colors; process-color conversion belongs in the printer's color-managed workflow.
+- Use the SVG master for print layout. The supplied files use RGB colors; leave CMYK conversion to the printer's color management.
 
 ## Source and reproduction
 
 The abstract R was rebuilt as three smooth vector paths from the approved concept.
 The wordmark uses outlined Anton lettering, condensed and slanted for the approved
-broadcast style. The tagline uses outlined Inter. The logo is a vector refinement
-of the approved raster concept, rather than a pixel-exact trace.
+broadcast style. The tagline uses outlined Inter. The logo was redrawn in vector
+form from the approved raster concept, not traced from it.
 
 Font sources and their SIL Open Font License notices are retained in [source](source):
 [Anton](https://github.com/google/fonts/tree/main/ofl/anton) and
 [Inter](https://github.com/google/fonts/tree/main/ofl/inter).
-The font files are unchanged; the artwork's letter outlines carry the visual adjustments.
+The font files are unmodified; any condensing or slant is applied to the letter outlines in the artwork.
 
-The built-in image generation tool supplied a refinement reference. Its transparent
-outputs showed edge artifacts, so final SVG and PNG assets use the clean vector
-reconstruction. The generation prompts and color correction are recorded in
+An AI image generator produced a refinement reference. Its transparent images
+had edge artifacts, so the final SVG and PNG files come from the vector rebuild
+instead. The generation prompts and color correction are recorded in
 [the prompt log](source/generation-prompts.md).
 
 Run the following commands from `docs/branding/production/`. On Windows, rebuild the text outlines

@@ -1,7 +1,9 @@
 use anyhow::Result;
-pub use rating_core::tuning::Split;
-use rating_core::tuning::validate;
-use rating_core::{Audit, EloGrid, EloSettings, GameFile, LeagueConfig, replay_elo};
+use rating_core::{
+    Audit, EloGrid, EloSettings, GameFile, LeagueConfig, replay_elo,
+    scoring::standard_error,
+    tuning::{Ranges, SearchParameters, Split, add_candidates, boundary_note, grid_candidates, select, validate},
+};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
@@ -19,6 +21,22 @@ impl Parameters {
             home_advantage: settings.home_advantage,
             offseason_regression: settings.offseason_regression,
         }
+    }
+}
+
+impl SearchParameters for Parameters {
+    const NAMES: [&'static str; 3] = ["k", "home_advantage", "offseason_regression"];
+
+    fn from_values([k, home_advantage, offseason_regression]: [f64; 3]) -> Self {
+        Self {
+            k,
+            home_advantage,
+            offseason_regression,
+        }
+    }
+
+    fn values(self) -> [f64; 3] {
+        [self.k, self.home_advantage, self.offseason_regression]
     }
 
     fn distance(self, baseline: Self) -> f64 {
@@ -60,9 +78,12 @@ pub struct Evaluation {
     pub calibration: Vec<CalibrationBin>,
 }
 
-struct Candidate {
-    parameters: Parameters,
-    evaluation: Evaluation,
+fn mean_season_mse(evaluation: &Evaluation) -> f64 {
+    evaluation.mean_season_mse
+}
+
+fn season_mse(evaluation: &Evaluation) -> Vec<f64> {
+    evaluation.seasons.iter().map(|s| s.overall.mse).collect()
 }
 
 #[derive(Serialize)]
@@ -113,19 +134,7 @@ impl Grid {
     }
 
     fn candidates(&self) -> Vec<Parameters> {
-        let mut result = Vec::new();
-        for &k in &self.k {
-            for &home_advantage in &self.home_advantage {
-                for &offseason_regression in &self.offseason_regression {
-                    result.push(Parameters {
-                        k,
-                        home_advantage,
-                        offseason_regression,
-                    });
-                }
-            }
-        }
-        result
+        grid_candidates([&self.k, &self.home_advantage, &self.offseason_regression])
     }
 
     fn expand(&mut self, best: Parameters) -> bool {
@@ -147,56 +156,6 @@ impl Grid {
         }
         changed
     }
-}
-
-/// Inclusive `[min, max]` of each parameter over every evaluated candidate.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
-pub struct Ranges {
-    pub k: [f64; 2],
-    pub home_advantage: [f64; 2],
-    pub offseason_regression: [f64; 2],
-}
-
-impl Ranges {
-    fn of(evaluated: &[Parameters]) -> Self {
-        let range = |value: fn(&Parameters) -> f64| {
-            evaluated
-                .iter()
-                .map(value)
-                .fold([f64::INFINITY, f64::NEG_INFINITY], |[lo, hi], v| [lo.min(v), hi.max(v)])
-        };
-        Self {
-            k: range(|p| p.k),
-            home_advantage: range(|p| p.home_advantage),
-            offseason_regression: range(|p| p.offseason_regression),
-        }
-    }
-
-    /// Parameter names, in report key order, whose selected value equals its evaluated minimum or maximum.
-    fn boundary(&self, selected: Parameters) -> Vec<&'static str> {
-        [
-            ("k", selected.k, self.k),
-            ("home_advantage", selected.home_advantage, self.home_advantage),
-            (
-                "offseason_regression",
-                selected.offseason_regression,
-                self.offseason_regression,
-            ),
-        ]
-        .into_iter()
-        .filter(|&(_, value, [lo, hi])| value == lo || value == hi)
-        .map(|(name, _, _)| name)
-        .collect()
-    }
-}
-
-fn boundary_note(names: &[&str]) -> Option<String> {
-    (!names.is_empty()).then(|| {
-        format!(
-            "Selected parameters lie on a searched boundary ({}); extend tuning_grids in the league configuration and rerun before adopting.",
-            names.join(", ")
-        )
-    })
 }
 
 #[derive(Serialize)]
@@ -299,25 +258,12 @@ fn evaluate_parameters(history: &GameFile, cfg: &LeagueConfig, parameters: Param
     Ok(evaluate(&replay.audit, start, end))
 }
 
-fn standard_error(values: &[f64]) -> Option<f64> {
-    (values.len() >= 2).then(|| {
-        let n = values.len() as f64;
-        let mean = values.iter().sum::<f64>() / n;
-        (values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0) / n).sqrt()
-    })
-}
-
-fn differences(baseline: &Evaluation, selected: &Evaluation) -> Vec<f64> {
-    baseline
-        .seasons
-        .iter()
-        .zip(&selected.seasons)
-        .map(|(a, b)| a.overall.mse - b.overall.mse)
-        .collect()
-}
-
 fn compare(baseline: Evaluation, selected: Evaluation) -> Comparison {
-    let differences = differences(&baseline, &selected);
+    let differences: Vec<_> = season_mse(&baseline)
+        .iter()
+        .zip(season_mse(&selected))
+        .map(|(a, b)| a - b)
+        .collect();
     let improvement = baseline.mean_season_mse - selected.mean_season_mse;
     Comparison {
         mean_season_mse_improvement: improvement,
@@ -337,48 +283,6 @@ fn compare(baseline: Evaluation, selected: Evaluation) -> Comparison {
     }
 }
 
-fn add_candidates(
-    candidates: &mut Vec<Candidate>,
-    parameters: impl IntoIterator<Item = Parameters>,
-    history: &GameFile,
-    cfg: &LeagueConfig,
-    split: Split,
-) -> Result<()> {
-    for parameters in parameters {
-        if !candidates.iter().any(|c| c.parameters == parameters) {
-            candidates.push(Candidate {
-                parameters,
-                evaluation: evaluate_parameters(history, cfg, parameters, split.tune_start, split.tune_end)?,
-            });
-        }
-    }
-    candidates.sort_by(|a, b| a.evaluation.mean_season_mse.total_cmp(&b.evaluation.mean_season_mse));
-    Ok(())
-}
-
-fn select(candidates: &[Candidate], baseline: Parameters) -> (&Candidate, usize) {
-    let best = &candidates[0];
-    // Paired season variation is a stability heuristic, not a significance test after searching.
-    let eligible: Vec<_> = candidates
-        .iter()
-        .filter(|c| {
-            c.evaluation.mean_season_mse - best.evaluation.mean_season_mse
-                <= standard_error(&differences(&c.evaluation, &best.evaluation)).unwrap_or(0.0) + 1e-12
-        })
-        .collect();
-    let selected = eligible
-        .iter()
-        .copied()
-        .min_by(|a, b| {
-            a.parameters
-                .distance(baseline)
-                .total_cmp(&b.parameters.distance(baseline))
-                .then_with(|| a.evaluation.mean_season_mse.total_cmp(&b.evaluation.mean_season_mse))
-        })
-        .unwrap();
-    (selected, eligible.len())
-}
-
 pub fn run(history: &GameFile, cfg: &LeagueConfig, split: Split, config_sha256: String, history_sha256: String) -> Result<Report> {
     let run_at = chrono::Utc::now().to_rfc3339();
     validate(history, cfg, split)?;
@@ -386,16 +290,17 @@ pub fn run(history: &GameFile, cfg: &LeagueConfig, split: Split, config_sha256: 
     let (mut grid, grid_source) = Grid::starting(cfg.tuning_grids.as_ref().and_then(|g| g.elo.as_ref()));
     let coarse_grid = grid.clone();
     let mut candidates = Vec::new();
+    let evaluate_tuning = |parameters| evaluate_parameters(history, cfg, parameters, split.tune_start, split.tune_end);
     eprintln!(
         "Searching Elo parameters using seasons {}–{} only...",
         split.tune_start, split.tune_end
     );
-    add_candidates(&mut candidates, [baseline], history, cfg, split)?;
-    add_candidates(&mut candidates, grid.candidates(), history, cfg, split)?;
+    add_candidates(&mut candidates, [baseline], evaluate_tuning, mean_season_mse)?;
+    add_candidates(&mut candidates, grid.candidates(), evaluate_tuning, mean_season_mse)?;
     let mut expansion_rounds = 0;
     while expansion_rounds < 4 && grid.expand(candidates[0].parameters) {
         expansion_rounds += 1;
-        add_candidates(&mut candidates, grid.candidates(), history, cfg, split)?;
+        add_candidates(&mut candidates, grid.candidates(), evaluate_tuning, mean_season_mse)?;
     }
     let boundary_limited = grid.clone().expand(candidates[0].parameters);
     let steps = Parameters {
@@ -419,10 +324,10 @@ pub fn run(history: &GameFile, cfg: &LeagueConfig, split: Split, config_sha256: 
                 .filter(|r| (0.0..=1.0).contains(r))
                 .collect(),
         };
-        add_candidates(&mut candidates, local.candidates(), history, cfg, split)?;
+        add_candidates(&mut candidates, local.candidates(), evaluate_tuning, mean_season_mse)?;
     }
-    let (selected, near_best_candidates) = select(&candidates, baseline);
-    let evaluated_ranges = Ranges::of(&candidates.iter().map(|c| c.parameters).collect::<Vec<_>>());
+    let (selected, near_best_candidates) = select(&candidates, baseline, mean_season_mse, season_mse);
+    let evaluated_ranges = Ranges::of(candidates.iter().map(|c| c.parameters));
     let selected_on_boundary = evaluated_ranges.boundary(selected.parameters);
     let baseline_tuning = &candidates.iter().find(|c| c.parameters == baseline).unwrap().evaluation;
     eprintln!(
@@ -491,6 +396,7 @@ pub fn run(history: &GameFile, cfg: &LeagueConfig, split: Split, config_sha256: 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rating_core::tuning::Candidate;
 
     fn row(season: i32, expected: f64, observed: f64) -> Audit {
         Audit {
@@ -541,13 +447,13 @@ mod tests {
                 evaluation: evaluate(&[row(2010, 0.0, 0.0), row(2011, 0.1, 0.0)], 2010, 2011),
             },
         ];
-        let (selected, eligible) = select(&candidates, baseline);
-        assert_eq!(selected.parameters, baseline);
-        assert_eq!(eligible, 2);
+        let selected = |candidates: &[Candidate<Parameters, Evaluation>]| {
+            let (selected, eligible) = select(candidates, baseline, mean_season_mse, season_mse);
+            (selected.parameters, eligible)
+        };
+        assert_eq!(selected(&candidates), (baseline, 2));
         candidates[1].evaluation = evaluate(&[row(2010, 0.1, 0.0), row(2011, 0.1, 0.0)], 2010, 2011);
-        assert_eq!(select(&candidates, baseline).0.parameters.k, 30.0);
-        assert_eq!(standard_error(&[1.0, 3.0]), Some(1.0));
-        assert_eq!(standard_error(&[1.0]), None);
+        assert_eq!(selected(&candidates).0.k, 30.0);
     }
 
     #[test]
@@ -586,28 +492,18 @@ mod tests {
     }
 
     #[test]
-    fn boundary_detection_flags_minimum_and_maximum_and_ignores_interior_values() {
-        let p = |k, home_advantage, offseason_regression| Parameters {
-            k,
-            home_advantage,
-            offseason_regression,
+    fn search_names_and_values_follow_the_serialized_parameters() {
+        let p = Parameters {
+            k: 20.0,
+            home_advantage: 55.0,
+            offseason_regression: 0.25,
         };
-        let ranges = Ranges::of(&[p(10.0, 40.0, 0.5), p(20.0, 0.0, 0.25), p(5.0, 70.0, 1.0)]);
-        assert_eq!(
-            ranges,
-            Ranges {
-                k: [5.0, 20.0],
-                home_advantage: [0.0, 70.0],
-                offseason_regression: [0.25, 1.0],
-            }
-        );
-        assert!(ranges.boundary(p(10.0, 40.0, 0.5)).is_empty());
-        assert_eq!(ranges.boundary(p(5.0, 40.0, 1.0)), ["k", "offseason_regression"]);
-        assert_eq!(ranges.boundary(p(20.0, 0.0, 0.5)), ["k", "home_advantage"]);
-        assert_eq!(boundary_note(&[]), None);
-        assert_eq!(
-            boundary_note(&["k", "offseason_regression"]).unwrap(),
-            "Selected parameters lie on a searched boundary (k, offseason_regression); extend tuning_grids in the league configuration and rerun before adopting."
-        );
+        let fields: Vec<_> = Parameters::NAMES
+            .iter()
+            .zip(p.values())
+            .map(|(name, value)| format!("\"{name}\":{value:?}"))
+            .collect();
+        assert_eq!(serde_json::to_string(&p).unwrap(), format!("{{{}}}", fields.join(",")));
+        assert_eq!(Parameters::from_values(p.values()), p);
     }
 }

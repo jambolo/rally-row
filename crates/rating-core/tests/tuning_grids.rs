@@ -1,8 +1,9 @@
 use rating_core::{BayesianGrid, EloGrid, EloTuneSettings, LeagueConfig, TuningGrids};
 use serde_json::{Value, json};
+use test_support::league_config_json;
 
 fn nfl() -> Value {
-    serde_json::from_str(include_str!("../../../config/nfl.json")).unwrap()
+    league_config_json("nfl")
 }
 
 fn grids() -> TuningGrids {

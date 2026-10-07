@@ -1,5 +1,6 @@
 use chrono::{TimeZone, Utc};
 use rating_core::{EloSeed, Game, LeagueConfig, Outcome, Rating, bayesian::fit_posterior};
+use test_support::league_config;
 
 // Mirrored by apps/web/test/fit-scale.test.ts: same generator, seed value, and fixed model settings, so both
 // languages fit the identical 2,430-game season. With plain objective summation this fit does not converge.
@@ -13,7 +14,7 @@ impl Lcg {
 }
 
 fn config() -> LeagueConfig {
-    let mut cfg: LeagueConfig = serde_json::from_str(include_str!("../../../config/mlb.json")).unwrap();
+    let mut cfg = league_config("mlb");
     cfg.elo.initial = 1500.0;
     cfg.elo.scale = 400.0;
     cfg.elo.home_advantage = 24.0;
