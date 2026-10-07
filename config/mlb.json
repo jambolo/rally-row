@@ -20,6 +20,7 @@
           "name": "Oakland Athletics",
           "location": "Oakland",
           "abbreviation": "OAK",
+          "division": "AL-W",
           "source_ids": [
             "133"
           ]
@@ -30,6 +31,7 @@
           "name": "Athletics",
           "location": "Sacramento",
           "abbreviation": "ATH",
+          "division": "AL-W",
           "source_ids": [
             "133"
           ]
@@ -47,6 +49,7 @@
           "name": "Atlanta Braves",
           "location": "Atlanta",
           "abbreviation": "ATL",
+          "division": "NL-E",
           "source_ids": [
             "144"
           ]
@@ -64,6 +67,7 @@
           "name": "Arizona Diamondbacks",
           "location": "Arizona",
           "abbreviation": "AZ",
+          "division": "NL-W",
           "source_ids": [
             "109"
           ]
@@ -81,6 +85,7 @@
           "name": "Baltimore Orioles",
           "location": "Baltimore",
           "abbreviation": "BAL",
+          "division": "AL-E",
           "source_ids": [
             "110"
           ]
@@ -98,6 +103,7 @@
           "name": "Boston Red Sox",
           "location": "Boston",
           "abbreviation": "BOS",
+          "division": "AL-E",
           "source_ids": [
             "111"
           ]
@@ -115,6 +121,7 @@
           "name": "Chicago Cubs",
           "location": "Chicago",
           "abbreviation": "CHC",
+          "division": "NL-C",
           "source_ids": [
             "112"
           ]
@@ -132,6 +139,7 @@
           "name": "Cincinnati Reds",
           "location": "Cincinnati",
           "abbreviation": "CIN",
+          "division": "NL-C",
           "source_ids": [
             "113"
           ]
@@ -149,6 +157,7 @@
           "name": "Cleveland Indians",
           "location": "Cleveland",
           "abbreviation": "CLE",
+          "division": "AL-C",
           "source_ids": [
             "114"
           ]
@@ -159,6 +168,7 @@
           "name": "Cleveland Guardians",
           "location": "Cleveland",
           "abbreviation": "CLE",
+          "division": "AL-C",
           "source_ids": [
             "114"
           ]
@@ -176,6 +186,7 @@
           "name": "Colorado Rockies",
           "location": "Colorado",
           "abbreviation": "COL",
+          "division": "NL-W",
           "source_ids": [
             "115"
           ]
@@ -193,6 +204,7 @@
           "name": "Chicago White Sox",
           "location": "Chicago",
           "abbreviation": "CWS",
+          "division": "AL-C",
           "source_ids": [
             "145"
           ]
@@ -210,6 +222,7 @@
           "name": "Detroit Tigers",
           "location": "Detroit",
           "abbreviation": "DET",
+          "division": "AL-C",
           "source_ids": [
             "116"
           ]
@@ -223,10 +236,22 @@
       "eras": [
         {
           "from_season": 1998,
+          "through_season": 2012,
+          "name": "Houston Astros",
+          "location": "Houston",
+          "abbreviation": "HOU",
+          "division": "NL-C",
+          "source_ids": [
+            "117"
+          ]
+        },
+        {
+          "from_season": 2013,
           "through_season": null,
           "name": "Houston Astros",
           "location": "Houston",
           "abbreviation": "HOU",
+          "division": "AL-W",
           "source_ids": [
             "117"
           ]
@@ -244,6 +269,7 @@
           "name": "Kansas City Royals",
           "location": "Kansas City",
           "abbreviation": "KC",
+          "division": "AL-C",
           "source_ids": [
             "118"
           ]
@@ -261,6 +287,7 @@
           "name": "Anaheim Angels",
           "location": "Anaheim",
           "abbreviation": "ANA",
+          "division": "AL-W",
           "source_ids": [
             "108"
           ]
@@ -271,6 +298,7 @@
           "name": "Los Angeles Angels of Anaheim",
           "location": "Los Angeles",
           "abbreviation": "LAA",
+          "division": "AL-W",
           "source_ids": [
             "108"
           ]
@@ -281,6 +309,7 @@
           "name": "Los Angeles Angels",
           "location": "Los Angeles",
           "abbreviation": "LAA",
+          "division": "AL-W",
           "source_ids": [
             "108"
           ]
@@ -298,6 +327,7 @@
           "name": "Los Angeles Dodgers",
           "location": "Los Angeles",
           "abbreviation": "LAD",
+          "division": "NL-W",
           "source_ids": [
             "119"
           ]
@@ -315,6 +345,7 @@
           "name": "Florida Marlins",
           "location": "Florida",
           "abbreviation": "FLA",
+          "division": "NL-E",
           "source_ids": [
             "146"
           ]
@@ -325,6 +356,7 @@
           "name": "Miami Marlins",
           "location": "Miami",
           "abbreviation": "MIA",
+          "division": "NL-E",
           "source_ids": [
             "146"
           ]
@@ -342,6 +374,7 @@
           "name": "Milwaukee Brewers",
           "location": "Milwaukee",
           "abbreviation": "MIL",
+          "division": "NL-C",
           "source_ids": [
             "158"
           ]
@@ -359,6 +392,7 @@
           "name": "Minnesota Twins",
           "location": "Minnesota",
           "abbreviation": "MIN",
+          "division": "AL-C",
           "source_ids": [
             "142"
           ]
@@ -376,6 +410,7 @@
           "name": "New York Mets",
           "location": "New York",
           "abbreviation": "NYM",
+          "division": "NL-E",
           "source_ids": [
             "121"
           ]
@@ -393,6 +428,7 @@
           "name": "New York Yankees",
           "location": "New York",
           "abbreviation": "NYY",
+          "division": "AL-E",
           "source_ids": [
             "147"
           ]
@@ -410,6 +446,7 @@
           "name": "Philadelphia Phillies",
           "location": "Philadelphia",
           "abbreviation": "PHI",
+          "division": "NL-E",
           "source_ids": [
             "143"
           ]
@@ -427,6 +464,7 @@
           "name": "Pittsburgh Pirates",
           "location": "Pittsburgh",
           "abbreviation": "PIT",
+          "division": "NL-C",
           "source_ids": [
             "134"
           ]
@@ -444,6 +482,7 @@
           "name": "San Diego Padres",
           "location": "San Diego",
           "abbreviation": "SD",
+          "division": "NL-W",
           "source_ids": [
             "135"
           ]
@@ -461,6 +500,7 @@
           "name": "Seattle Mariners",
           "location": "Seattle",
           "abbreviation": "SEA",
+          "division": "AL-W",
           "source_ids": [
             "136"
           ]
@@ -478,6 +518,7 @@
           "name": "San Francisco Giants",
           "location": "San Francisco",
           "abbreviation": "SF",
+          "division": "NL-W",
           "source_ids": [
             "137"
           ]
@@ -495,6 +536,7 @@
           "name": "St. Louis Cardinals",
           "location": "St. Louis",
           "abbreviation": "STL",
+          "division": "NL-C",
           "source_ids": [
             "138"
           ]
@@ -512,6 +554,7 @@
           "name": "Tampa Bay Devil Rays",
           "location": "Tampa Bay",
           "abbreviation": "TB",
+          "division": "AL-E",
           "source_ids": [
             "139"
           ]
@@ -522,6 +565,7 @@
           "name": "Tampa Bay Rays",
           "location": "Tampa Bay",
           "abbreviation": "TB",
+          "division": "AL-E",
           "source_ids": [
             "139"
           ]
@@ -539,6 +583,7 @@
           "name": "Texas Rangers",
           "location": "Texas",
           "abbreviation": "TEX",
+          "division": "AL-W",
           "source_ids": [
             "140"
           ]
@@ -556,6 +601,7 @@
           "name": "Toronto Blue Jays",
           "location": "Toronto",
           "abbreviation": "TOR",
+          "division": "AL-E",
           "source_ids": [
             "141"
           ]
@@ -573,6 +619,7 @@
           "name": "Montreal Expos",
           "location": "Montreal",
           "abbreviation": "MON",
+          "division": "NL-E",
           "source_ids": [
             "120"
           ]
@@ -583,6 +630,7 @@
           "name": "Washington Nationals",
           "location": "Washington",
           "abbreviation": "WSH",
+          "division": "NL-E",
           "source_ids": [
             "120"
           ]
@@ -650,6 +698,116 @@
     "postseason": {
       "start": "09-30",
       "end": "11-05"
+    }
+  },
+  "postseason": {
+    "conferences": [
+      {
+        "id": "AL",
+        "name": "American League",
+        "divisions": [
+          {
+            "id": "AL-E",
+            "name": "AL East",
+            "short": "East"
+          },
+          {
+            "id": "AL-C",
+            "name": "AL Central",
+            "short": "Central"
+          },
+          {
+            "id": "AL-W",
+            "name": "AL West",
+            "short": "West"
+          }
+        ]
+      },
+      {
+        "id": "NL",
+        "name": "National League",
+        "divisions": [
+          {
+            "id": "NL-E",
+            "name": "NL East",
+            "short": "East"
+          },
+          {
+            "id": "NL-C",
+            "name": "NL Central",
+            "short": "Central"
+          },
+          {
+            "id": "NL-W",
+            "name": "NL West",
+            "short": "West"
+          }
+        ]
+      }
+    ],
+    "teams_per_conference": 6,
+    "division_winners_first": true,
+    "reseed": false,
+    "rounds": [
+      {
+        "name": "Wild Card Series",
+        "short": "WC",
+        "round_label": "F",
+        "pattern": "HHH",
+        "home": "higher_seed"
+      },
+      {
+        "name": "Division Series",
+        "short": "DS",
+        "round_label": "D",
+        "pattern": "HHAAH",
+        "home": "higher_seed"
+      },
+      {
+        "name": "League Championship Series",
+        "short": "LCS",
+        "round_label": "L",
+        "pattern": "HHAAAHH",
+        "home": "higher_seed"
+      },
+      {
+        "name": "World Series",
+        "short": "WS",
+        "round_label": "W",
+        "pattern": "HHAAAHH",
+        "home": "better_record"
+      }
+    ],
+    "tiebreakers": {
+      "one_per_division": false,
+      "division": [
+        {
+          "rule": "head_to_head"
+        },
+        {
+          "rule": "division_record"
+        },
+        {
+          "rule": "conference_record"
+        },
+        {
+          "rule": "last_half_conference"
+        }
+      ],
+      "conference": [
+        {
+          "rule": "head_to_head"
+        },
+        {
+          "rule": "division_record"
+        },
+        {
+          "rule": "conference_record"
+        },
+        {
+          "rule": "last_half_conference"
+        }
+      ]
     }
   },
   "elo": {

@@ -37,6 +37,8 @@ pub struct TeamEra {
     /// Display abbreviation; when absent, the first source id serves.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub abbreviation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub division: Option<String>,
     pub source_ids: Vec<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -122,6 +124,67 @@ pub struct LeagueWindows {
     pub season: MonthDayWindow,
     pub postseason: MonthDayWindow,
 }
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Division {
+    pub id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub short: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Conference {
+    pub id: String,
+    pub name: String,
+    pub divisions: Vec<Division>,
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SeriesHome {
+    HigherSeed,
+    BetterRecord,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PostseasonRound {
+    pub name: String,
+    pub short: String,
+    pub round_label: String,
+    pub pattern: String,
+    pub home: SeriesHome,
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TiebreakKind {
+    HeadToHead,
+    HeadToHeadSweep,
+    DivisionRecord,
+    ConferenceRecord,
+    CommonGames,
+    StrengthOfVictory,
+    StrengthOfSchedule,
+    LastHalfConference,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TiebreakRule {
+    pub rule: TiebreakKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_games: Option<u32>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Tiebreakers {
+    pub one_per_division: bool,
+    pub division: Vec<TiebreakRule>,
+    pub conference: Vec<TiebreakRule>,
+}
+/// The league's current playoff format; division membership lives on team eras.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PostseasonFormat {
+    pub conferences: Vec<Conference>,
+    pub teams_per_conference: u32,
+    pub division_winners_first: bool,
+    pub reseed: bool,
+    pub rounds: Vec<PostseasonRound>,
+    pub tiebreakers: Tiebreakers,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LeagueConfig {
     pub schema_version: u32,
@@ -135,6 +198,8 @@ pub struct LeagueConfig {
     pub ties_allowed_in: Vec<String>,
     pub display: DisplayVocabulary,
     pub windows: LeagueWindows,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub postseason: Option<PostseasonFormat>,
     pub elo: EloSettings,
     pub bayesian: BayesianSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -387,6 +452,7 @@ impl LeagueConfig {
                     !era.name.is_empty()
                         && !era.location.is_empty()
                         && era.abbreviation.as_deref() != Some("")
+                        && era.division.as_deref() != Some("")
                         && !era.source_ids.is_empty(),
                     "Incomplete team era: {}",
                     team.id
@@ -444,6 +510,119 @@ impl LeagueConfig {
         );
         if let Some(grids) = &self.tuning_grids {
             grids.validate()?;
+        }
+        self.validate_postseason()?;
+        Ok(())
+    }
+    fn validate_postseason(&self) -> Result<()> {
+        let Some(p) = &self.postseason else {
+            for team in &self.teams {
+                ensure!(
+                    team.eras.iter().all(|e| e.division.is_none()),
+                    "Team division needs a postseason format: {}",
+                    team.id
+                );
+            }
+            return Ok(());
+        };
+        ensure!(
+            !self.ties_allowed_in.iter().any(|s| s == "postseason"),
+            "Postseason format requires postseason ties to be disallowed"
+        );
+        ensure!(
+            p.conferences.len().is_power_of_two(),
+            "Conference count must be a power of two"
+        );
+        let mut ids = BTreeSet::new();
+        for c in &p.conferences {
+            ensure!(ids.insert(c.id.as_str()), "Duplicate conference or division id");
+            for d in &c.divisions {
+                ensure!(ids.insert(d.id.as_str()), "Duplicate conference or division id");
+            }
+        }
+        ensure!(p.teams_per_conference >= 2, "Invalid playoff field size");
+        ensure!(
+            !p.division_winners_first
+                || p.conferences
+                    .iter()
+                    .all(|c| c.divisions.len() <= p.teams_per_conference as usize),
+            "More divisions than playoff spots"
+        );
+        let bracket = p.teams_per_conference.next_power_of_two().trailing_zeros() as usize;
+        ensure!(
+            p.rounds.len() == bracket + p.conferences.len().trailing_zeros() as usize,
+            "Round count does not match the bracket"
+        );
+        let mut labels = BTreeSet::new();
+        ensure!(
+            p.rounds.iter().all(|r| labels.insert(r.round_label.as_str())),
+            "Duplicate round label"
+        );
+        ensure!(
+            p.rounds.iter().all(|r| !r.pattern.is_empty()
+                && r.pattern.len() % 2 == 1
+                && r.pattern.chars().all(|c| matches!(c, 'H' | 'A' | 'N'))),
+            "Invalid series pattern"
+        );
+        ensure!(
+            p.rounds
+                .iter()
+                .skip(bracket)
+                .all(|r| r.home != SeriesHome::HigherSeed || !r.pattern.contains(['H', 'A'])),
+            "Rounds between conferences cannot give home advantage by seed"
+        );
+        let rules = || p.tiebreakers.division.iter().chain(&p.tiebreakers.conference);
+        ensure!(
+            rules().all(|r| r.min_games.is_none() || r.rule == TiebreakKind::CommonGames),
+            "min_games applies only to common_games"
+        );
+        ensure!(rules().all(|r| r.min_games != Some(0)), "min_games must be positive");
+        for list in [&p.tiebreakers.division, &p.tiebreakers.conference] {
+            let mut seen = Vec::new();
+            for r in list {
+                ensure!(!seen.contains(&r.rule), "Duplicate tiebreaker");
+                seen.push(r.rule);
+            }
+        }
+        let divisions: BTreeSet<&str> = p
+            .conferences
+            .iter()
+            .flat_map(|c| &c.divisions)
+            .map(|d| d.id.as_str())
+            .collect();
+        for team in &self.teams {
+            for era in &team.eras {
+                ensure!(
+                    era.division.as_deref().is_none_or(|d| divisions.contains(d)),
+                    "Unknown division: {}",
+                    team.id
+                );
+            }
+        }
+        fn current(team: &Team) -> Option<&str> {
+            team.eras.last().and_then(|e| e.division.as_deref())
+        }
+        for team in &self.teams {
+            ensure!(current(team).is_some(), "Current division missing: {}", team.id);
+        }
+        for d in p.conferences.iter().flat_map(|c| &c.divisions) {
+            ensure!(
+                self.teams.iter().any(|t| current(t) == Some(d.id.as_str())),
+                "Division has no current teams: {}",
+                d.id
+            );
+        }
+        for c in &p.conferences {
+            let count = self
+                .teams
+                .iter()
+                .filter(|t| current(t).is_some_and(|d| c.divisions.iter().any(|x| x.id == d)))
+                .count();
+            ensure!(
+                count >= p.teams_per_conference as usize,
+                "Conference has fewer teams than playoff spots: {}",
+                c.id
+            );
         }
         Ok(())
     }

@@ -40,12 +40,16 @@ pub fn history_file(cfg: &LeagueConfig, seasons: RangeInclusive<i32>, games: Vec
 /// One game repeated every fixture season: UTC "MM-DDTHH:MM:SSZ" start, home, away, phase, round, result.
 type Slot = (&'static str, &'static str, &'static str, &'static str, u32, Outcome);
 
-/// The NFL configuration narrowed to ARI, ATL and BAL without aliases, with an offline canonical-json source and an
-/// `elo_tune` split that tunes 2003–2004 and holds out the seasons after it. Every season plays `schedule`;
-/// postseason games are neutral-site Super Bowls, and game ids are `<season>-<position in schedule>`.
+/// The NFL configuration narrowed to ARI, ATL and BAL without aliases, postseason format or divisions, with an offline
+/// canonical-json source and an `elo_tune` split that tunes 2003–2004 and holds out the seasons after it. Every season plays
+/// `schedule`; postseason games are neutral-site Super Bowls, and game ids are `<season>-<position in schedule>`.
 fn fixture(seasons: RangeInclusive<i32>, schedule: &[Slot]) -> (LeagueConfig, GameFile) {
     let mut cfg = league_config("nfl");
     cfg.teams.retain(|t| ["ARI", "ATL", "BAL"].contains(&t.id.as_str()));
+    cfg.postseason = None;
+    for era in cfg.teams.iter_mut().flat_map(|t| &mut t.eras) {
+        era.division = None;
+    }
     cfg.aliases.clear();
     cfg.source.kind = "canonical-json".into();
     cfg.source.url = "https://invalid.example.test/no-network-needed".into();

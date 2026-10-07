@@ -62,6 +62,7 @@ it('ignores a snapshot saved for another league', async () => {
     configHash,
     dataBase: 'https://test/data',
     season: 2026,
+    postseasonSimulations: 200,
     store,
     fetchSource: async () => JSON.stringify({ schema_version: 2, league: 'nfl', games: [game()] }),
   }).initialize();

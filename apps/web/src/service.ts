@@ -2,6 +2,7 @@ import { adapterFor, type SourceAdapter } from './adapters/index.ts';
 import { startTimeUtc } from './time.ts';
 import { gameSchema, type EloSeed, type Game, type GameFile, type LeagueConfig } from './contracts.ts';
 import { fitPosterior, predict, teamEstimates, type Posterior, type Prediction } from './model.ts';
+import { simulatePostseason, type PostseasonState } from './postseason.ts';
 import { download, parseSource, usableResults } from './provider.ts';
 import { currentCacheKey, readCache, readSeedWithHash, writeCache, type Store } from './storage.ts';
 import { readSnapshot, writeSnapshot, type ModelSnapshot } from './snapshot.ts';
@@ -34,6 +35,7 @@ export type PublicState = {
   ties_allowed_in: LeagueConfig['ties_allowed_in'];
   teams: ReturnType<typeof teamEstimates>;
   games: GameView[];
+  postseason: PostseasonState | null;
 };
 
 export class PredictionService {
@@ -55,6 +57,8 @@ export class PredictionService {
       fetchSource?: typeof download;
       now?: () => Date;
       onProgress?: (phase: RefreshPhase) => void;
+      /** Postseason simulations per rebuild; tests lower it to keep runtime low. */
+      postseasonSimulations?: number;
     },
   ) {
     this.config = options.config;
@@ -74,6 +78,7 @@ export class PredictionService {
       held_results: 0,
       teams: [],
       games: [],
+      postseason: null,
     };
   }
   private configurationMetadata() {
@@ -89,6 +94,17 @@ export class PredictionService {
       ties_allowed_in: this.config.ties_allowed_in,
     };
   }
+  /** Odds from the current-season fit; a failed simulation never blocks predictions. */
+  private postseasonOdds(): PostseasonState | null {
+    if (this.config.postseason === undefined) return null;
+    const simulations = this.options.postseasonSimulations;
+    try {
+      return simulatePostseason(this.model!, this.state.games, simulations === undefined ? {} : { simulations });
+    } catch (e) {
+      return { status: 'error', error: message(e) };
+    }
+  }
+
   getState(): PublicState {
     return this.state;
   }
@@ -220,6 +236,7 @@ export class PredictionService {
           prediction: predict(model, g.home_team, g.away_team, g.neutral, g.phase),
         };
       });
+      this.state.postseason = this.postseasonOdds();
       this.state = { ...this.state, ...this.configurationMetadata(), status: 'ready' };
       // Commit the source and fitted output only after the complete build succeeds.
       if (snapshot) this.state.cached = false;

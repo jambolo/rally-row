@@ -18,6 +18,7 @@ export const teamSchema = z.object({
         location: z.string().min(1),
         /** Display abbreviation; when absent, the first source id serves. */
         abbreviation: z.string().min(1).optional(),
+        division: z.string().min(1).optional(),
         source_ids: z.array(z.string().min(1)).min(1),
       }),
     )
@@ -70,6 +71,45 @@ export const windowsSchema = z.object({ season: monthDayWindow, postseason: mont
   if (!(span(ps) <= span(pe) && span(pe) <= span(se)))
     ctx.addIssue({ code: 'custom', message: 'Postseason window must lie within the season window' });
 });
+const tiebreakRule = z.object({
+  rule: z.enum([
+    'head_to_head',
+    'head_to_head_sweep',
+    'division_record',
+    'conference_record',
+    'common_games',
+    'strength_of_victory',
+    'strength_of_schedule',
+    'last_half_conference',
+  ]),
+  min_games: z.number().int().positive('min_games must be positive').optional(),
+});
+const postseasonSchema = z.object({
+  conferences: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        divisions: z.array(z.object({ id: z.string(), name: z.string(), short: z.string().optional() })).min(1),
+      }),
+    )
+    .min(1),
+  teams_per_conference: z.number().int().min(2, 'Invalid playoff field size'),
+  division_winners_first: z.boolean(),
+  reseed: z.boolean(),
+  rounds: z
+    .array(
+      z.object({
+        name: z.string(),
+        short: z.string(),
+        round_label: z.string(),
+        pattern: z.string().regex(/^(?:[HAN]{2})*[HAN]$/, 'Invalid series pattern'),
+        home: z.enum(['higher_seed', 'better_record']),
+      }),
+    )
+    .min(1),
+  tiebreakers: z.object({ one_per_division: z.boolean(), division: z.array(tiebreakRule), conference: z.array(tiebreakRule) }),
+});
 export const configSchema = z
   .object({
     schema_version: z.literal(2),
@@ -86,6 +126,7 @@ export const configSchema = z
     ties_allowed_in: z.array(phase),
     display: displaySchema,
     windows: windowsSchema,
+    postseason: postseasonSchema.optional(),
     elo: eloSchema,
     bayesian: z.object({
       prior_sd_elo: finite.positive(),
@@ -117,8 +158,60 @@ export const configSchema = z
           fail('Latest identity does not match current team metadata');
       });
     }
+    for (const message of postseasonProblems(c)) ctx.addIssue({ code: 'custom', message });
   });
 export type LeagueConfig = z.infer<typeof configSchema>;
+export type PostseasonFormat = NonNullable<LeagueConfig['postseason']>;
+/** Mirrors the Rust validation: returns at most one message, the first failing check. */
+export function postseasonProblems(c: LeagueConfig): string[] {
+  const p = c.postseason;
+  const withId = (id: string, message: string) => [`${id}: ${message}`];
+  if (!p) {
+    for (const team of c.teams)
+      if (team.eras.some((e) => e.division !== undefined)) return withId(team.id, 'Team division needs a postseason format');
+    return [];
+  }
+  if (c.ties_allowed_in.includes('postseason')) return ['Postseason format requires postseason ties to be disallowed'];
+  const n = p.conferences.length;
+  if ((n & (n - 1)) !== 0) return ['Conference count must be a power of two'];
+  const seen = new Set<string>();
+  for (const conf of p.conferences) {
+    for (const id of [conf.id, ...conf.divisions.map((d) => d.id)]) {
+      if (seen.has(id)) return ['Duplicate conference or division id'];
+      seen.add(id);
+    }
+  }
+  if (p.teams_per_conference < 2) return ['Invalid playoff field size'];
+  if (p.division_winners_first && p.conferences.some((x) => x.divisions.length > p.teams_per_conference))
+    return ['More divisions than playoff spots'];
+  let bracket = 0;
+  while (2 ** bracket < p.teams_per_conference) bracket++;
+  if (p.rounds.length !== bracket + Math.log2(n)) return ['Round count does not match the bracket'];
+  if (new Set(p.rounds.map((r) => r.round_label)).size !== p.rounds.length) return ['Duplicate round label'];
+  if (p.rounds.some((r) => !/^(?:[HAN]{2})*[HAN]$/.test(r.pattern))) return ['Invalid series pattern'];
+  if (p.rounds.some((r, i) => i >= bracket && r.home === 'higher_seed' && /[HA]/.test(r.pattern)))
+    return ['Rounds between conferences cannot give home advantage by seed'];
+  const lists = [p.tiebreakers.division, p.tiebreakers.conference];
+  const rules = lists.flat();
+  if (rules.some((r) => r.min_games !== undefined && r.rule !== 'common_games')) return ['min_games applies only to common_games'];
+  if (rules.some((r) => r.min_games === 0)) return ['min_games must be positive'];
+  if (lists.some((l) => new Set(l.map((r) => r.rule)).size !== l.length)) return ['Duplicate tiebreaker'];
+  const divisions = new Set(p.conferences.flatMap((x) => x.divisions.map((d) => d.id)));
+  for (const team of c.teams)
+    for (const era of team.eras)
+      if (era.division !== undefined && !divisions.has(era.division)) return withId(team.id, 'Unknown division');
+  for (const team of c.teams)
+    if (team.eras[team.eras.length - 1].division === undefined) return withId(team.id, 'Current division missing');
+  const current = c.teams.map((t) => t.eras[t.eras.length - 1].division);
+  for (const conf of p.conferences)
+    for (const d of conf.divisions) if (!current.includes(d.id)) return withId(d.id, 'Division has no current teams');
+  for (const conf of p.conferences) {
+    const ids = new Set(conf.divisions.map((d) => d.id));
+    if (current.filter((d) => d !== undefined && ids.has(d)).length < p.teams_per_conference)
+      return withId(conf.id, 'Conference has fewer teams than playoff spots');
+  }
+  return [];
+}
 export const gameSchema = z.object({
   id: z.string().min(1),
   league: z.string(),
@@ -215,4 +308,15 @@ export function teamIdentity(config: LeagueConfig, id: string, season: number) {
     ?.eras.find((e) => season >= e.from_season && (e.through_season === null || season <= e.through_season));
   if (!era) throw new Error(`No historical identity for ${id} in ${season}`);
   return era;
+}
+
+/** Consecutive eras with the same name and location, merged; division-only changes are not identity changes. */
+export function identityRuns(team: LeagueConfig['teams'][number]) {
+  const runs: { from_season: number; through_season: number | null; name: string; location: string }[] = [];
+  for (const era of team.eras) {
+    const last = runs.at(-1);
+    if (last && last.name === era.name && last.location === era.location) last.through_season = era.through_season;
+    else runs.push({ from_season: era.from_season, through_season: era.through_season, name: era.name, location: era.location });
+  }
+  return runs;
 }

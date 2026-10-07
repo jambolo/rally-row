@@ -14,6 +14,19 @@ it('builds, reuses, and upgrades snapshots through the bundled worker without wi
   const bundle = await build({
     configFile: false,
     logLevel: 'silent',
+    // The bundle cannot take the service option, and this test checks worker plumbing, not odds precision.
+    plugins: [
+      {
+        name: 'fewer-postseason-simulations',
+        enforce: 'pre',
+        transform(code, id) {
+          if (!id.endsWith('/src/postseason.ts')) return null;
+          const lowered = code.replace('POSTSEASON_SIMULATIONS = 10_000', 'POSTSEASON_SIMULATIONS = 200');
+          if (lowered === code) throw new Error('POSTSEASON_SIMULATIONS = 10_000 not found');
+          return lowered;
+        },
+      },
+    ],
     build: {
       write: false,
       minify: false,
@@ -71,7 +84,7 @@ it('builds, reuses, and upgrades snapshots through the bundled worker without wi
   const result = await run({});
   expect(messages.at(-1)).toMatchObject({
     type: 'complete',
-    state: { status: 'ready', training_games: 1 },
+    state: { status: 'ready', training_games: 1, postseason: { status: 'ready', simulations: 200 } },
     model: { games_used: 1 },
   });
   expect(messages).toContainEqual({ type: 'progress', phase: 'building' });

@@ -2,6 +2,8 @@ import { afterEach, it, expect, vi } from 'vitest';
 import { PredictionService } from '../src/service.ts';
 import { fitPosterior, predict } from '../src/model.ts';
 import * as model from '../src/model.ts';
+import * as postseason from '../src/postseason.ts';
+import type { LeagueConfig } from '../src/contracts.ts';
 import { readSnapshot, snapshotKey } from '../src/snapshot.ts';
 import { digest, memoryStore, type Store } from '../src/storage.ts';
 import { config, configHash, game, historyBytes, seed } from './helpers.ts';
@@ -32,7 +34,7 @@ function publish(files: Record<string, string> = {}) {
   return { published, requests };
 }
 const service = (store: Store, fetchSource: () => Promise<string>) =>
-  new PredictionService({ config, configHash, dataBase, season: 2026, now, store, fetchSource });
+  new PredictionService({ config, configHash, dataBase, season: 2026, postseasonSimulations: 200, now, store, fetchSource });
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -113,6 +115,7 @@ it('revalidates published inputs and skips fitting for unchanged normalized data
     configHash,
     dataBase,
     season: 2026,
+    postseasonSimulations: 200,
     store,
     now: () => new Date('2026-09-19T19:00:00Z'),
     fetchSource: async () => [rows[0], rows[2], rows[1].replace('SF,10', 'SF,11')].join('\n'),
@@ -197,6 +200,7 @@ it.each([
     configHash,
     dataBase,
     season: 2026,
+    postseasonSimulations: 200,
     store,
     now: () => new Date('2026-09-19T19:00:00Z'),
     fetchSource: async () => csv,
@@ -258,6 +262,7 @@ it.each([undefined, '0.0.0', '999.0.0', 42])('rebuilds unchanged inputs when the
     configHash,
     dataBase,
     season: 2026,
+    postseasonSimulations: 200,
     now,
     store,
     fetchSource: async () => csv,
@@ -355,6 +360,7 @@ it.each([true, false])('refreshes a changed baseline with unchanged games; updat
     configHash: oldHash,
     dataBase,
     season: 2026,
+    postseasonSimulations: 200,
     now,
     store,
     fetchSource: async () => csv,
@@ -418,6 +424,7 @@ it.each([true, false])('updates configuration metadata only after a successful r
     configHash: updatedHash,
     dataBase,
     season: 2026,
+    postseasonSimulations: 200,
     store,
     now: () => new Date('2026-09-19T19:00:00Z'),
     fetchSource: async () => JSON.stringify({ schema_version: 2, league: 'nfl', games: snapshot.file.games }),
@@ -481,6 +488,7 @@ it('announces changed data while the old predictions are still available, then c
     configHash,
     dataBase,
     season: 2026,
+    postseasonSimulations: 200,
     now,
     store,
     fetchSource: async () => csv.replace('SF,10,SEA,20', 'SF,30,SEA,20'),
@@ -541,6 +549,7 @@ it.each([
       configHash,
       dataBase,
       season: 2026,
+      postseasonSimulations: 200,
       store,
       now: () => at,
       fetchSource: async () => source,
@@ -640,6 +649,7 @@ it('preserves pregame predictions when the game itself, same-day games, or later
       configHash,
       dataBase,
       season: 2026,
+      postseasonSimulations: 200,
       now: () => at,
       store: memoryStore(),
       fetchSource: async () => text,
@@ -679,6 +689,7 @@ it('uses earlier UTC dates for canonical results across timezones and respects p
     configHash,
     dataBase,
     season: 2026,
+    postseasonSimulations: 200,
     now,
     store: memoryStore(),
     fetchSource: async () =>
@@ -698,4 +709,71 @@ it('uses earlier UTC dates for canonical results across timezones and respects p
   const prediction = s.getState().games.find((g) => g.id === 'target')!.prediction;
   expect(prediction).toEqual(predict(fitPosterior(seed(), [prior], config), 'SEA', 'SF', false, 'postseason'));
   expect(prediction!.tie).toBe(0);
+});
+
+it('publishes ready postseason odds in the state and the snapshot', async () => {
+  publish();
+  const store = memoryStore();
+  const s = service(store, async () => csv);
+  await s.initialize();
+  expect(s.getState()).toMatchObject({ status: 'ready', postseason: { status: 'ready', mode: 'regular', simulations: 200 } });
+  expect(readSnapshot(store, 'nfl')?.state.postseason?.status).toBe('ready');
+  expect(readSnapshot(store, 'nfl')?.state.postseason).toEqual(s.getState().postseason);
+});
+
+it('reuses saved postseason odds without simulating for unchanged data', async () => {
+  publish();
+  const store = memoryStore();
+  const first = service(store, async () => csv);
+  await first.initialize();
+  const simulated = vi.spyOn(postseason, 'simulatePostseason');
+  const second = service(store, async () => csv);
+  await second.initialize();
+  expect(simulated).not.toHaveBeenCalled();
+  expect(second.getState().postseason?.status).toBe('ready');
+  expect(second.getState().postseason).toEqual(first.getState().postseason);
+  await service(store, async () => csv.replace('SF,10,SEA,20', 'SF,30,SEA,20')).initialize();
+  expect(simulated).toHaveBeenCalledOnce();
+});
+
+it('reports a failed postseason simulation without blocking predictions', async () => {
+  publish();
+  const store = memoryStore();
+  vi.spyOn(postseason, 'simulatePostseason').mockImplementation(() => {
+    throw new Error('simulation failed');
+  });
+  const s = service(store, async () => csv);
+  await s.initialize();
+  expect(s.getState()).toMatchObject({
+    status: 'ready',
+    warning: null,
+    postseason: { status: 'error', error: 'simulation failed' },
+  });
+  expect(readSnapshot(store, 'nfl')?.state.postseason).toEqual({ status: 'error', error: 'simulation failed' });
+});
+
+it('publishes no postseason odds for a config without a postseason block', async () => {
+  publish();
+  const store = memoryStore();
+  const plain: LeagueConfig = {
+    ...config,
+    postseason: undefined,
+    teams: config.teams.map((t) => ({ ...t, eras: t.eras.map((era) => ({ ...era, division: undefined })) })),
+  };
+  const simulated = vi.spyOn(postseason, 'simulatePostseason');
+  const s = new PredictionService({
+    config: plain,
+    configHash,
+    dataBase,
+    season: 2026,
+    postseasonSimulations: 200,
+    now,
+    store,
+    fetchSource: async () => csv,
+  });
+  await s.initialize();
+  expect(s.getState()).toMatchObject({ status: 'ready', postseason: null });
+  expect(simulated).not.toHaveBeenCalled();
+  expect(readSnapshot(store, 'nfl')).not.toBeNull();
+  expect(readSnapshot(store, 'nfl')?.state.postseason).toBeNull();
 });

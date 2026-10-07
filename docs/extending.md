@@ -12,7 +12,7 @@ Adding a league takes these steps:
 
 ## Configuration
 
-Create `config/<id>.json`, usually by copying `config/nfl.json` or `config/mlb.json`. The league id `<id>` uses letters, digits, and hyphens; it names the file and must equal the file's `id`. Every program reads `<config-dir>/<id>.json` for `--league <id>` and rejects a file whose `id` differs. Change the name, complete team list, aliases, historical start, season rollover month, source, display vocabulary, windows, model settings, and tie rules.
+Create `config/<id>.json`, usually by copying `config/nfl.json` or `config/mlb.json`. The league id `<id>` uses letters, digits, and hyphens; it names the file and must equal the file's `id`. Every program reads `<config-dir>/<id>.json` for `--league <id>` and rejects a file whose `id` differs. Change the name, complete team list, aliases, historical start, season rollover month, source, display vocabulary, windows, postseason format, model settings, and tie rules.
 
 | Key | Contents |
 | --- | --- |
@@ -25,6 +25,7 @@ Create `config/<id>.json`, usually by copying `config/nfl.json` or `config/mlb.j
 | `ties_allowed_in` | Phases whose games may end in a tie |
 | `display` | Interface vocabulary ([Display vocabulary](#display-vocabulary)) |
 | `windows` | Season and postseason windows ([Windows](#windows)) |
+| `postseason` | Optional current playoff format: conferences and divisions, playoff field, rounds, and tiebreakers ([Postseason format](#postseason-format)) |
 | `elo` | `initial`, `scale`, `k`, `home_advantage`, `offseason_regression` |
 | `bayesian` | `prior_sd_elo`, `tie_prior_games`, `tie_prior_rate` |
 | `elo_tune`, `bayes_tune` | Optional default tuning splits (`tune_start`, `tune_end`, `test_end`); `bayes_tune` falls back to `elo_tune` |
@@ -41,7 +42,7 @@ For the existing generic provider, use:
 
 Set `ties_allowed_in` to `[]` if no games may end in a tie, `["regular"]` if only regular-season games allow ties, or `["regular", "postseason"]` if both phases do. A tie in a phase that doesn't allow ties is an error. Where ties are allowed, Elo scores a tie as 0.5.
 
-Team IDs are stable franchise identities. Map the aliases of renamed or relocated teams to those identities; create a new team only for a new franchise. Each team has a current `name` and `location`, plus `eras` containing `from_season`, inclusive `through_season` (null for the open-ended current era), historical `name`, home-market `location`, optional display `abbreviation` (default: the first source id), and accepted `source_ids`. Eras must be contiguous and non-overlapping, cover the configured history start, and end in an open-ended era matching the current metadata. See [franchise identity rules](team-history.md). The model assumes the configured team list is appropriate for the entire modeled historical period. Supporting league expansion *within* that period may need activation dates and a policy for new-team priors.
+Team IDs are stable franchise identities. Map the aliases of renamed or relocated teams to those identities; create a new team only for a new franchise. Each team has a current `name` and `location`, plus `eras` containing `from_season`, inclusive `through_season` (null for the open-ended current era), historical `name`, home-market `location`, optional display `abbreviation` (default: the first source id), optional `division` (a division id from [`postseason`](#postseason-format), required on the open-ended era when `postseason` is present and optional on older eras), and accepted `source_ids`. Eras must be contiguous and non-overlapping, cover the configured history start, and end in an open-ended era matching the current metadata. A change of division starts a new era. See [franchise identity rules](team-history.md). The model assumes the configured team list is appropriate for the entire modeled historical period. Supporting league expansion *within* that period may need activation dates and a policy for new-team priors.
 
 ### Display vocabulary
 
@@ -66,6 +67,74 @@ The browser renders every league-specific label from `display`:
 | `postseason` | `01-08` to `02-15` | `09-30` to `11-05` |
 
 The browser uses the windows only to choose the default league when neither the address hash nor a remembered choice decides. On the browser-local date (February 29 counts as February 28), exactly one league in its season window is the default. If several are in season, the first in registry order that is in its postseason window wins, else the one with the fewest days until its postseason starts. If none is in season, the one whose season starts soonest wins. Remaining ties follow registry order.
+
+### Postseason format
+
+`postseason` is optional and describes only the league's current playoff format; earlier formats are not modeled. Division membership lives on team eras (`division`), and a team's conference is the conference whose `divisions` lists its division. Conference and division ids are unique across the league. Without `postseason`, no era may name a division.
+
+| Key | Contents |
+| --- | --- |
+| `conferences` | One or more conferences (the count is a power of two: 1, 2, 4, ...), each with `id`, `name`, and one or more `divisions`, each with `id`, `name`, and optional `short` label (for example `East`) |
+| `teams_per_conference` | Playoff teams per conference, at least 2 |
+| `division_winners_first` | When `true`, division winners take seeds 1 through the number of divisions, ordered by the conference tiebreakers, and wild cards follow; when `false`, all teams are seeded together |
+| `reseed` | When `true`, each later round pairs the best remaining seed with the worst remaining seed; when `false`, the bracket stays fixed |
+| `rounds` | One entry per round, first round first: `name` (display name), `short` (short label), `round_label` (the source's postseason round label for that round's games; unique), `pattern`, `home` |
+| `tiebreakers` | `one_per_division`, `division` (rule list for ties within a division), `conference` (rule list for ties across a conference, for seeding and wild cards) |
+
+Let P be the smallest power of two at least `teams_per_conference`. The top P minus `teams_per_conference` seeds get byes and skip the first round. The first log2(P) rounds are played within each conference; rounds at 0-based index log2(P) or later are between conferences, with conference champions meeting in configuration order. The round count must equal log2(P) + log2(number of conferences). NFL: P = 8, 1 bye, 3 + 1 = 4 rounds. MLB: P = 8, 2 byes, 3 + 1 = 4 rounds.
+
+`pattern` is an odd-length string over `H`, `A`, `N`, one letter per possible game in order: `H` is the H-side team at home, `A` is the other team at home, `N` is a neutral site. A series ends when a team wins (length + 1) / 2 games: `H` is one game, `HHH` best of three, `HHAAH` best of five, `HHAAAHH` best of seven. `home` picks the H side: `higher_seed` is the better (lower-numbered) seed; `better_record` is the better regular-season win percentage, then the conference tiebreakers. Seeds from different conferences are not comparable, so a round between conferences that uses `higher_seed` must have a pattern of only `N`.
+
+Tiebreak rules use wins, losses, and ties only (a tie counts as half a win); scores are not used.
+
+| Rule | Compares |
+| --- | --- |
+| `head_to_head` | Win percentage in games among the tied teams |
+| `head_to_head_sweep` | Applies only when one tied team beat every other tied team, or lost to every other; with two teams it equals `head_to_head` |
+| `division_record` | Win percentage against the team's own division |
+| `conference_record` | Win percentage against the team's own conference |
+| `common_games` | Win percentage against opponents every tied team played; optional `min_games` (positive) is the fewest such games each tied team needs for the rule to apply |
+| `strength_of_victory` | Combined win percentage of the teams it beat |
+| `strength_of_schedule` | Combined win percentage of all its opponents |
+| `last_half_conference` | Win percentage over the second half of its conference games |
+
+Each list applies its rules in order, and a rule may appear at most once per list. `min_games` is allowed only on `common_games`. With `one_per_division`, before the conference rules break a tie among teams from different divisions, only each division's top team (by the division rules) stays in the tie.
+
+Validation runs the checks below in order and reports the first failure. For messages that name an id, the browser prefixes it (`ARI: Unknown division`) and the Rust programs append it (`Unknown division: ARI`). An empty `division` string is rejected like other empty era fields (Rust: `Incomplete team era`).
+
+| # | Rejects | Message | Id |
+| --- | --- | --- | --- |
+| 1 | No `postseason` but some era has `division` | `Team division needs a postseason format` | team |
+| 2 | `ties_allowed_in` contains `postseason` | `Postseason format requires postseason ties to be disallowed` | none |
+| 3 | Conference count not a power of two | `Conference count must be a power of two` | none |
+| 4 | An id repeated across conference and division ids | `Duplicate conference or division id` | none |
+| 5 | `teams_per_conference` below 2 | `Invalid playoff field size` | none |
+| 6 | `division_winners_first` and a conference with more divisions than `teams_per_conference` | `More divisions than playoff spots` | none |
+| 7 | Round count not equal to log2(P) + log2(conference count) | `Round count does not match the bracket` | none |
+| 8 | Two rounds share a `round_label` | `Duplicate round label` | none |
+| 9 | A pattern that is empty, of even length, or has a letter other than `H`, `A`, `N` | `Invalid series pattern` | none |
+| 10 | A round between conferences with `home` `higher_seed` and a pattern containing `H` or `A` | `Rounds between conferences cannot give home advantage by seed` | none |
+| 11 | `min_games` on a rule other than `common_games` | `min_games applies only to common_games` | none |
+| 12 | `min_games` of 0 | `min_games must be positive` | none |
+| 13 | A rule repeated within one list | `Duplicate tiebreaker` | none |
+| 14 | An era `division` that is not a configured division | `Unknown division` | team |
+| 15 | A team whose open-ended era has no `division` (older eras may omit it) | `Current division missing` | team |
+| 16 | A configured division that no team's open-ended era names | `Division has no current teams` | division |
+| 17 | A conference with fewer current teams than `teams_per_conference` | `Conference has fewer teams than playoff spots` | conference |
+
+| Key | NFL | MLB |
+| --- | --- | --- |
+| `conferences` | `AFC`, `NFC`; each with East, North, South, West divisions (`AFC-E` to `NFC-W`) | `AL` (American League), `NL` (National League); each with East, Central, West divisions (`AL-E` to `NL-W`) |
+| `teams_per_conference` | 7 (1 bye) | 6 (2 byes) |
+| `division_winners_first` | `true` | `true` |
+| `reseed` | `true` | `false` |
+| `rounds` (`round_label`, `pattern`) | Wild Card (`WC`, `H`), Divisional (`DIV`, `H`), Conference Championship (`CON`, `H`), Super Bowl (`SB`, `N`) | Wild Card Series (`F`, `HHH`), Division Series (`D`, `HHAAH`), League Championship Series (`L`, `HHAAAHH`), World Series (`W`, `HHAAAHH`) |
+| `home` | `higher_seed`; Super Bowl `better_record` | `higher_seed`; World Series `better_record` |
+| `one_per_division` | `true` | `false` |
+| `division` tiebreakers | `head_to_head`, `division_record`, `common_games`, `conference_record`, `strength_of_victory`, `strength_of_schedule` | `head_to_head`, `division_record`, `conference_record`, `last_half_conference` |
+| `conference` tiebreakers | `head_to_head_sweep`, `conference_record`, `common_games` (`min_games` 4), `strength_of_victory`, `strength_of_schedule` | same as `division` |
+
+Postseason odds are simulated only in the browser: `apps/web/src/postseason.ts` (with `standings.ts` and `random.ts`) runs in the refresh worker, called from `service.ts`, and the result is saved in the model snapshot. The Rust programs only parse and validate the `postseason` block and era `division` fields; they never simulate, so there is no simulation parity fixture. A league with a valid `postseason` block gets the postseason odds panel without code changes.
 
 ## Source adapters
 

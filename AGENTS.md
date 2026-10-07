@@ -77,6 +77,8 @@ in dev, and copies them into the build.
   The worker posts back `PublicState`, the `Posterior`, and the store's entries, and the page persists them.
 - Matchup predictions are computed on the page from the returned `Posterior` (`predict` in `model.ts`, derived
   in `App.tsx` with `useMemo`, never stored).
+- Postseason odds are computed in the worker (`postseason.ts`, called from `service.ts`) and stored in the
+  snapshot. The page only renders them (`PostseasonOdds.tsx`).
 
 ### Invariants that span files
 

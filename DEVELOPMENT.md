@@ -90,7 +90,7 @@ its seed, and the browser and backtest reject a seed whose hashes do not match.
 
 - New season: rerun the importer and Elo for the league, then rebuild the site. Import only historical seasons.
 - Model configuration or history changes: rerun Elo to update the linked hashes.
-- Franchise identity or alias changes: rerun the importer, then Elo.
+- Franchise identity, alias, or division changes: rerun the importer, then Elo.
 
 Rebuild the site to publish updated data and configuration. The Vite build copies every JSON file under
 `config/` and `data/` into the site as `config/<id>.json`, `data/<id>/history.json`, and

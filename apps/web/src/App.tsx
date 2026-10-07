@@ -8,6 +8,8 @@ import { smallStore } from './small-store.ts';
 import { postseasonLabel, scheduleKey, scheduleOptions } from './schedule.ts';
 import { APP_VERSION } from './version.ts';
 import { BookOdds } from './BookOdds.tsx';
+import { PostseasonOdds } from './PostseasonOdds.tsx';
+import { identityRuns } from './contracts.ts';
 
 const base = import.meta.env.BASE_URL;
 /** Absolute URL of a published site directory such as `config` or `data`. */
@@ -511,6 +513,9 @@ export default function App() {
                 </div>
               </section>
             </div>
+            {state.postseason !== null && (
+              <PostseasonOdds odds={state.postseason} label={state.display.postseason_label} teamName={teamName} />
+            )}
             <details className="panel methodology">
               <summary>Franchise names and locations over time</summary>
               <div>
@@ -529,18 +534,18 @@ export default function App() {
                     </thead>
                     <tbody>
                       {state.team_history
-                        .filter((t) => t.eras.length > 1)
+                        .filter((t) => identityRuns(t).length > 1)
                         .flatMap((t) =>
-                          t.eras.map((e) => (
-                            <tr key={`${t.id}-${e.from_season}`}>
+                          identityRuns(t).map((run) => (
+                            <tr key={`${t.id}-${run.from_season}`}>
                               <th>{t.id}</th>
                               <td>
-                                {e.from_season}–{e.through_season ?? 'present'}
+                                {run.from_season}–{run.through_season ?? 'present'}
                               </td>
                               <td>
-                                {e.name}
+                                {run.name}
                                 <br />
-                                <span className="sd">{e.location}</span>
+                                <span className="sd">{run.location}</span>
                               </td>
                             </tr>
                           )),

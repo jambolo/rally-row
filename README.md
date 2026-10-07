@@ -97,6 +97,58 @@ stronger estimated team; **± uncertainty** is one standard deviation of the cur
 not the matchup's 95% probability interval. Expand **Franchise names and locations over time** to see
 how renamed or relocated teams retain their rating history.
 
+### Postseason odds
+
+The **Postseason odds** panel, below **Team ratings**, shows each team's chances of making the playoffs and
+advancing through them. Rally Row simulates the rest of the season 10,000 times from the current team strength
+estimates, including their uncertainty, and reports how often each outcome happened. The odds are recomputed
+whenever the predictions are rebuilt and are saved with them; the same inputs always give the same odds.
+
+There is one table per conference (NFL: AFC and NFC) or league (MLB: American League and National League).
+Rows are sorted by playoff chance, then title chance. During the regular season, teams with less than a 0.1%
+chance of making the playoffs are not listed. In postseason mode only teams still playing are listed, and a
+table with no team left is not shown. The columns are:
+
+- **Team**, with its division below the name.
+- **Record**: the team's current regular-season record, W-L, or W-L-T when it has ties.
+- **Seed**: the team's average playoff seed in the simulations where it qualifies, or **—** if it never does.
+- **Playoffs**, **Division**, and **Bye**: the chances of making the playoffs, winning the division, and earning
+  a first-round bye.
+- One column per round after the first, labeled with the round's short name (NFL **DIV**, **CON**, **SB**; MLB
+  **DS**, **LCS**, **WS**): the chance of playing in that round. Hover over a label to see the round's name.
+- **Title**: the chance of winning the championship.
+- **Status**: shown only in postseason mode (see below).
+
+Chances are rounded to whole percentages. **0%** and **100%** mean the outcome never or always happened in the
+simulations; other chances that round to 0 or 100 show as **<1%** or **>99%**. A dashed line below the seventh
+NFL row or the sixth MLB row marks the last playoff spot; it is left out when no team is listed below that row.
+The teams above it are the likeliest playoff teams, not necessarily the current seeds.
+
+The chip in the panel's corner shows its mode:
+
+- **Regular season**: while regular-season games remain, each simulation plays the remaining schedule, seeds
+  the playoff field with the league's tiebreakers, and plays the bracket.
+- **Playoffs** (NFL) or **Postseason** (MLB): once every regular-season game has a result, or as soon as a
+  postseason game has one, the field is set. Completed postseason games and series standings count, and only
+  the remaining games are simulated. Unplayed regular-season games are then ignored, with a note.
+
+In postseason mode, the **Status** column shows where each listed team stands: **Qualified**, **Bye**, a series
+in progress such as **DS 2-1 vs NYY** (the round, the team's wins and losses, and the opponent's team ID),
+**Won** with the round it just won (for example **Won WC**), **Champion**, or **Pending** when the team's
+qualification depends on tiebreak draws. Teams that missed the playoffs or have been eliminated are not listed.
+
+A game counts once its result is usable (see [Updates and saved results](#updates-and-saved-results)); until
+then it is simulated like an upcoming game. Simulated games use the same win and tie probabilities and home
+advantage as matchup predictions, with no ties in the postseason. Notes below the panel's explanation report
+adjustments, such as ignored games or seeds that depend on random tiebreak draws.
+
+Tiebreakers use only wins, losses, and ties (see [League differences](#league-differences)). Rules that need
+points or other statistics are not modeled, and ties the modeled rules can't break are decided by random
+draws, so a close race may not match the official tiebreak. If the simulation fails, for example because the
+listed postseason games don't fit the league's playoff format, the panel shows
+**Postseason odds are unavailable** with technical details; matchup predictions are unaffected. The odds are
+model estimates, not validated forecasts.
+
 ### League differences
 
 Both leagues use the same model and the same screens. These details differ:
@@ -110,6 +162,10 @@ Both leagues use the same model and the same screens. These details differ:
 | When a result counts | On the next calendar day in Eastern Time | As soon as the provider marks the game final |
 | Earlier days for pregame favorites | Earlier dates in Eastern Time | Earlier official game dates, so doubleheader games never inform each other |
 | Current season | Runs into the next year; January–March games belong to the season that began the previous year | The calendar year |
+| Playoff field | 7 teams per conference: 4 division winners seeded 1–4, then 3 wild cards; the top seed gets a bye | 6 teams per league: 3 division winners seeded 1–3, then 3 wild cards; the top 2 seeds get byes |
+| Series formats | Single games: Wild Card, Divisional, and Conference Championship at the higher seed; Super Bowl at a neutral site | Wild Card Series best of 3, all at the higher seed; Division Series best of 5 (2-2-1); League Championship Series and World Series best of 7 (2-3-2); World Series home field goes to the better record |
+| Reseeding | After each round, the best remaining seed plays the worst remaining seed | None; the bracket is fixed |
+| Tiebreakers | Division: head-to-head, division record, common games, conference record, strength of victory, strength of schedule. Seeding and wild cards: the best tied team from each division first, then head-to-head sweep, conference record, common games (at least 4), strength of victory, strength of schedule | Head-to-head, division record, league record, record in the last half of intraleague games |
 
 ### Updates and saved results
 

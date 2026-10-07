@@ -20,11 +20,16 @@ identity ranges and aliases.
 - Team estimates resolve names and abbreviations from the model's target season. An era's abbreviation
   defaults to its first source id, so NFL eras omit it; MLB eras must set it, such as `MON` for the
   Montreal Expos and `WSH` for the Washington Nationals.
+- Division membership lives on eras: an era's optional `division` names a division id from the league's
+  [postseason format](extending.md#postseason-format). When `postseason` is configured, every team's
+  open-ended era must name one; older eras may omit it. A team that changes division gets a new era starting
+  with its first season in the new division, even when its name and location stay the same. The app's
+  franchise history merges consecutive eras with the same name and location, so such a split adds no row.
 
 ## Identity events
 
-Configured eras for franchises whose name or home market changed during the modeled history. An open-ended
-era runs through the current season.
+Configured eras for franchises whose name, home market, or division changed during the modeled history. An
+open-ended era runs through the current season.
 
 ### NFL
 
@@ -43,6 +48,7 @@ era runs through the current season.
 | `LAA` | `108` | `ANA`, then `LAA` | Anaheim Angels, Anaheim (1998–2004); Los Angeles Angels of Anaheim, Los Angeles (2005–2015); Los Angeles Angels, Los Angeles (2016–) |
 | `TB` | `139` | `TB` | Tampa Bay Devil Rays, Tampa Bay (1998–2007); Tampa Bay Rays, Tampa Bay (2008–) |
 | `MIA` | `146` | `FLA`, then `MIA` | Florida Marlins, Florida (1998–2011); Miami Marlins, Miami (2012–) |
+| `HOU` | `117` | `HOU` | Houston Astros, Houston, NL Central (1998–2012); Houston Astros, Houston, AL West (2013–) |
 | `CLE` | `114` | `CLE` | Cleveland Indians, Cleveland (1998–2021); Cleveland Guardians, Cleveland (2022–) |
 | `ATH` | `133` | `OAK`, then `ATH` | Oakland Athletics, Oakland (1998–2024); Athletics, Sacramento (2025–) |
 

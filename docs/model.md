@@ -417,6 +417,21 @@ mean-season and pooled advantages with paired-season and paired-game standard er
 two favorites differ and which favorite won, and reports the mean and maximum absolute difference in home-win
 probability.
 
+## Postseason simulation
+
+The app estimates postseason odds by Monte Carlo simulation in the browser's refresh worker, after each posterior fit. Each simulation draws one strength vector `theta = mu + L z`, where `mu` is the posterior mean, `L` is the Cholesky factor of the posterior covariance, and `z` is a vector of independent standard normals, so the draws keep the correlations between teams. Strengths stay constant within a simulation: simulated results never update them. Every simulated game uses the Davidson probabilities from [Win, loss, and tie likelihood](#win-loss-and-tie-likelihood) at the drawn strengths, with the same home advantage as matchup predictions (none at neutral sites) and the tie weight only where `ties_allowed_in` allows ties, so postseason games never tie. Each series follows its round's configured venue pattern.
+
+**Regular mode.** While any regular-season game lacks a usable result, each simulation plays the remaining regular-season games, seeds each conference with the configured tiebreakers, and plays the bracket. Tiebreakers use wins, losses, and ties only; a tie that the rules cannot break is decided by a random draw.
+
+**Postseason mode.** Once every regular-season game has a result, or as soon as any postseason game has one (unplayed regular-season games are then dropped, with a note), the standings are final and the simulation conditions on the listed postseason games:
+
+- Series state comes from completed postseason games, matched by round label and team pair. Listed wins count toward clinching, and the venue pattern resumes where the series stands.
+- Forced advancement: a team listed in a later round must have won its earlier series, even when that series' deciding result is not yet usable.
+- Seeding rejection: seeds come from the final standings, and when they depend on random tiebreak draws, 2,000 seedings are probed. Only seedings whose bracket can pair the listed series are kept. A simulation whose bracket contradicts the listed games is replayed with a seeding drawn again from the kept ones.
+- Relaxed mode: if no seeding fits, the probe is repeated with the division and conference tiebreaker lists emptied, so ties left after win percentage are drawn at random, and a note says that the computed tiebreakers disagree with the listed games. If still no seeding fits, or a simulation fails 1,000 attempts, the odds become the error state "The listed postseason games don't fit the configured playoff format." Matchup predictions are unaffected.
+
+Each probability is the share of 10,000 simulations, so its Monte Carlo standard error is at most `sqrt(0.25 / 10000) = 0.005`, or 0.5 percentage points. The mean seed averages only over the simulations in which the team qualifies. Simulations use a fixed random seed, so the output is deterministic: the same posterior and games always give the same odds.
+
 ## Limits and validation
 
 - Team strength is modeled as constant within each fitted season. There is no explicit random walk over time, injury adjustment, roster change, rest effect, or recency weighting within that season.
@@ -426,5 +441,10 @@ probability.
 - Result timing depends on the source. The NFL source doesn't say whether a score is final, so the app waits until the next calendar day in Eastern Time before using a reported outcome. MLB results count as soon as the Stats API marks a game final. Later corrections are accepted at the next successful update.
 - MLB games are never neutral-site games in the model, including games at special or international venues.
 - Backtests refit using earlier dates only. Evaluate held-out seasons and calibration before drawing conclusions about model quality.
+- Postseason odds keep each team's drawn strength fixed through a simulated season and postseason; simulated results never update ratings.
+- Postseason tiebreakers use wins, losses, and ties only. Rules based on points or other statistics are not modeled, so ties those rules would settle are decided by random draws.
+- The postseason simulation models only each league's current playoff format, as configured.
+- Postseason odds are not backtested or calibrated.
+- Postseason series state comes only from listed games; provider series fields (such as MLB series game numbers) are not parsed. A listing in which a later-round series depends on an unlisted earlier one can produce a relaxed-tiebreaker note or the error state.
 
 Unit tests cover symmetry, probability normalization, neutral-site handling, proper tie outcomes, posterior updates, an analytic two-team Hessian/covariance case, duplicate rejection, and repeatable refits. Integration tests cover provider normalization, cache fallback, corrected results, stale priors, and season boundaries. Shared fixtures in `crates/rating-core/tests/fixtures/` check that the Rust and TypeScript implementations agree: `bayesian-parity.json` for the Bayesian fit and `mlb-statsapi.json` for the MLB adapter.
