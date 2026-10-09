@@ -1,8 +1,8 @@
 use crate::{GameFile, HISTORY_SCHEMA_VERSION, LeagueConfig, TuningSettings, adapter_for, scoring::standard_error, validate_games};
 use anyhow::{Context, Result, bail, ensure};
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 
-#[derive(Clone, Copy, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Split {
     pub warmup_start: i32,
     pub tune_start: i32,

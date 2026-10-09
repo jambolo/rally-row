@@ -37,6 +37,7 @@ Dependency install-script permissions and release-age exceptions are in
 | `apps/elo-tune/` | Offline Elo parameter search and held-out evaluation |
 | `apps/bayes-tune/` | Offline Bayesian parameter search with fixed Elo and held-out evaluation |
 | `apps/evaluate-model/` | Offline scoring of Bayesian and in-season Elo predictions on held-out seasons, made with the configured settings |
+| `apps/simulate-season/` | Offline simulation of the held-out seasons: writes every game's pregame Bayesian and Elo predictions to `data/<id>/simulated-seasons.json` |
 | `apps/web/src/` | Browser app: league registry (`leagues.ts`) and league selection (`selection.ts`), contracts, source adapters and their registry (`adapters/`), Bayesian model, service and refresh worker, IndexedDB persistence (`persistence.ts`), small-key localStorage (`small-store.ts`), React interface |
 | `apps/web/test/` | Vitest tests: model, adapters and parity fixtures, league selection and switching, storage, startup/cache, identity |
 | `apps/web/scripts/` | Node backtest |
@@ -59,8 +60,9 @@ Each league has one configuration file in `config/`, named after its league id:
 
 A league's current season is the UTC year, minus one before its rollover month: NFL games from January
 through March belong to the previous season, and MLB seasons are calendar years. Season defaults use the
-current UTC date. Generated files are ignored by Git: `data/<id>/history.json` from the importer and
-`data/<id>/elo-<target-season>.json` from Elo.
+current UTC date. Generated files are ignored by Git: `data/<id>/history.json` from the importer,
+`data/<id>/elo-<target-season>.json` from Elo, and `data/<id>/simulated-seasons.json` from
+`simulate-season`.
 
 ```powershell
 cargo run --release -p history-importer -- --league nfl --through-season 2025
@@ -80,8 +82,9 @@ All command-line programs and the backtest take these options:
 | `--input <file>...` | `history-importer` | Reads saved provider files instead of downloading: one nflverse games CSV (NFL), one Stats API schedule JSON per season from `history_start` through `--through-season` (MLB), or one canonical JSON envelope. |
 | `--target-season <year>` | `elo-ratings` | Seed season; default the current season. |
 
-The tuners, the model evaluation, and the backtest take further options; see [Tuning](#tuning),
-[Model evaluation](#model-evaluation), and [Backtesting](#backtesting).
+The tuners, the model evaluation, the season simulation, and the backtest take further options; see
+[Tuning](#tuning), [Model evaluation](#model-evaluation), [Season simulation](#season-simulation), and
+[Backtesting](#backtesting).
 
 The importer replaces `data/<id>/history.json` only when every imported season has completed games and the
 league's completion marker (a completed Super Bowl for NFL, a completed World Series game for MLB); on
@@ -254,6 +257,27 @@ both shipped leagues evaluate 2023–2025. The tool validates the split as the t
 held-out season that falls within a configured tuning range. The MLB run takes a few seconds in a release
 build. The tool scores whatever the configuration holds, so apply tuned parameters before running it.
 
+## Season simulation
+
+`simulate-season` simulates a league's held-out seasons with the configured settings, one UTC date at a time,
+and writes every game's pregame Bayesian and Elo predictions to `data/<id>/simulated-seasons.json` for
+evaluation tools. They are the predictions `evaluate-model` scores. Like that tool, it runs offline against
+`data/<id>/history.json`, and its split defaults, overrides, and checks match `evaluate-model`, so both shipped
+leagues simulate 2023–2025.
+
+```powershell
+cargo run --release -p simulate-season -- --league nfl
+cargo run --release -p simulate-season -- --league mlb
+
+# Split overrides; the held-out seasons are tune_end + 1 through test_end
+cargo run --release -p simulate-season -- --league nfl --tune-end 2022 --test-end 2025
+```
+
+The file records SHA-256 hashes of the configuration and history, so rerun the tool after either changes. A failed
+run leaves the previous file in place. The MLB run takes about 7 seconds in a release build. Options, the
+simulation, the file format, and how to check a file:
+[Season simulation](docs/season-simulation.md).
+
 ## Backtesting
 
 The Node backtest reads a league's local history and Elo seed, then downloads the evaluated season's games
@@ -280,5 +304,6 @@ date's batch, so earlier games of the same official date can inform it; see
 - [Browser usage](README.md)
 - [Statistical model and backtesting methodology](docs/model.md)
 - [Adding leagues, source adapters, and data formats](docs/extending.md)
+- [Season simulation and its file format](docs/season-simulation.md)
 - [Franchise identities and aliases](docs/team-history.md)
 - [Branding and messaging](docs/branding.md)

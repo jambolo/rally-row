@@ -56,6 +56,10 @@ binaries in `apps/` are thin CLIs over it, so logic two tools share belongs in t
 3. `elo-tune` and `bayes-tune` are offline parameter searches. They never modify config.
 4. `evaluate-model` scores the model's predictions, made with the configured settings, on held-out seasons, which
    tuning never uses. It compares Bayesian predictions with in-season Elo ratings.
+5. `simulate-season --league <id>` simulates the same held-out seasons one UTC date at a time and writes every
+   game's pregame Bayesian and Elo predictions to `data/<id>/simulated-seasons.json` for evaluation tools. The file
+   embeds config and history hashes; consumers should reject a file whose hashes don't match. The per-season
+   prediction (`walk_forward::predict_season`) and the file contract (`SimulatedSeasons`) live in `rating-core`.
 
 The custom `projectData` plugin in `apps/web/vite.config.ts` serves the root `config/` and `data/` directories
 in dev, and copies them into the build.
@@ -116,3 +120,5 @@ the CD workflow then tags them and merges `master` back into `develop`. Pages de
 - `docs/model.md`: statistical methodology (Elo, the Davidson–Bradley–Terry Bayesian model, two-way
   moneylines, tuning, model evaluation).
 - `docs/extending.md`: adding leagues and source adapters, and the parity-fixture table.
+- `docs/season-simulation.md`: the `simulate-season` tool, its season simulation, and the
+  `simulated-seasons.json` format.

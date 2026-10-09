@@ -417,6 +417,9 @@ mean-season and pooled advantages with paired-season and paired-game standard er
 two favorites differ and which favorite won, and reports the mean and maximum absolute difference in home-win
 probability.
 
+`simulate-season` saves the Bayesian and Elo predictions behind these scores, game by game, so other tools can
+evaluate them without refitting; see [Season simulation](season-simulation.md).
+
 ## Postseason simulation
 
 The app estimates postseason odds by Monte Carlo simulation in the browser's refresh worker, after each posterior fit. Each simulation draws one strength vector `theta = mu + L z`, where `mu` is the posterior mean, `L` is the Cholesky factor of the posterior covariance, and `z` is a vector of independent standard normals, so the draws keep the correlations between teams. Strengths stay constant within a simulation: simulated results never update them. Every simulated game uses the Davidson probabilities from [Win, loss, and tie likelihood](#win-loss-and-tie-likelihood) at the drawn strengths, with the same home advantage as matchup predictions (none at neutral sites) and the tie weight only where `ties_allowed_in` allows ties, so postseason games never tie. Each series follows its round's configured venue pattern.
