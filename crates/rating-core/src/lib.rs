@@ -292,6 +292,23 @@ pub struct EloSeed {
     pub ratings: Vec<Rating>,
     pub audit: Vec<Audit>,
 }
+pub const SIMULATED_SEASONS_SCHEMA_VERSION: u32 = 1;
+
+/// `data/<league>/simulated-seasons.json`: pregame predictions for every game of the simulated seasons, made with the
+/// configured settings by simulating each season one UTC date at a time.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SimulatedSeasons {
+    pub schema_version: u32,
+    pub league: String,
+    pub generated_at: String,
+    pub history_sha256: String,
+    pub config_sha256: String,
+    /// The simulated seasons are `split.tune_end + 1` through `split.test_end`.
+    pub split: tuning::Split,
+    pub elo_settings: EloSettings,
+    pub bayesian_settings: BayesianSettings,
+    pub seasons: Vec<walk_forward::SeasonPredictions>,
+}
 
 pub fn digest(bytes: &[u8]) -> String {
     // sha2 0.11 returns a hybrid_array::Array, which no longer implements LowerHex.

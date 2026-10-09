@@ -1,7 +1,7 @@
 //! Bradley–Terry–Davidson likelihood and Laplace approximation, matching apps/web/src/model.ts.
 use crate::{Audit, BayesianSettings, EloSeed, Game, LeagueConfig, Outcome};
 use anyhow::{Context, Result, ensure};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub struct TieHistory {
@@ -49,7 +49,7 @@ impl TieHistory {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Probabilities {
     pub home_win: f64,
     pub away_win: f64,

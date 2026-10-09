@@ -178,6 +178,5 @@ apps/web/docs/
 # VS Code
 .vscode/
 
-# Generated league data (produced by history-importer and elo-ratings)
+# Generated league data
 data/
-data-*/
