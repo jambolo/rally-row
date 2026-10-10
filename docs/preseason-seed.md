@@ -54,9 +54,8 @@ writing the same league at once.
    differences, smoothed by `tie_prior_games` and `tie_prior_rate`
    ([Win, loss, and tie likelihood](model.md#win-loss-and-tie-likelihood)).
 
-[`bayes-tune`](bayesian-tuning.md), [`evaluate-model`](model-evaluation.md), and
-[`simulate-season`](season-simulation.md) build each evaluated season's preseason values the same way, from the
-seasons before it.
+[`bayes-tune`](bayesian-tuning.md) and [`simulate-season`](season-simulation.md) build each evaluated season's
+preseason values the same way, from the seasons before it.
 
 ## File format
 

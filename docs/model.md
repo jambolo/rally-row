@@ -387,8 +387,8 @@ improvement means the selected parameters performed better. Neither tuning proce
 
 ## Model evaluation
 
-`evaluate-model` scores the model's predictions, made with the configured settings (the values adopted after
-tuning), and compares two ways of learning from in-season results. It scores the held-out seasons,
+`evaluate-model` scores the model's predictions, made by `simulate-season` with the configured settings (the values
+adopted after tuning), and compares two ways of learning from in-season results. It scores the held-out seasons,
 `tune_end + 1` through `test_end` of the `bayes_tune` split (which falls back to `elo_tune`). The tuners never
 use those seasons to select parameters. Settings score better on the seasons used to choose
 them, so held-out scores give a fairer measure of forecasting skill.
@@ -419,9 +419,10 @@ mean-season and pooled advantages with paired-season and paired-game standard er
 two favorites differ and which favorite won, and reports the mean and maximum absolute difference in home-win
 probability.
 
-`simulate-season` saves the Bayesian and Elo predictions behind these scores, game by game, so other tools can
-evaluate them without refitting; see [Season simulation](season-simulation.md). [Model evaluation](model-evaluation.md)
-covers running `evaluate-model`, its summary, and every report field.
+`simulate-season` saves the Bayesian and Elo predictions behind these scores, game by game, and `evaluate-model`
+scores that file, so other tools can also evaluate them without refitting; see
+[Season simulation](season-simulation.md). [Model evaluation](model-evaluation.md) covers running `evaluate-model`, its
+summary, and every report field.
 
 ## Postseason simulation
 

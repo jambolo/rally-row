@@ -5,6 +5,8 @@ use rating_core::{EloTuneSettings, GameFile, HISTORY_SCHEMA_VERSION, LeagueConfi
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{
+    collections::BTreeMap,
+    ffi::OsString,
     fs,
     path::Path,
     process::{Command, Output},
@@ -54,6 +56,17 @@ impl ToolDir {
         let bytes = serde_json::to_vec(history).unwrap();
         fs::write(self.path().join("data/nfl/history.json"), &bytes).unwrap();
         bytes
+    }
+
+    /// Every file in `data/nfl`, by name, with its bytes.
+    fn data_files(&self) -> BTreeMap<OsString, Vec<u8>> {
+        fs::read_dir(self.path().join("data/nfl"))
+            .unwrap()
+            .map(|entry| {
+                let entry = entry.unwrap();
+                (entry.file_name(), fs::read(entry.path()).unwrap())
+            })
+            .collect()
     }
 
     pub fn run(&self, args: &[&str]) -> Output {
@@ -115,8 +128,8 @@ pub fn without_run_at(report: &Value) -> Value {
 
 /// Runs the tool twice on `cfg` and `history`, saving reports, and checks what every report-writing tool promises:
 /// each report is saved under `<report_name>` with the printed content and a UTC `run_at`, it carries the input hashes,
-/// the runs agree apart from `run_at`, and the inputs and an existing seed stay untouched. Returns the first report
-/// and its stderr.
+/// the runs agree apart from `run_at`, and the configuration and every file in `data/nfl`, including an existing seed,
+/// stay untouched. Returns the first report and its stderr.
 pub fn assert_read_only_and_repeatable(
     tool: &ToolDir,
     report_name: &str,
@@ -127,15 +140,14 @@ pub fn assert_read_only_and_repeatable(
     let history_bytes = tool.write_history(history);
     let seed = tool.path().join(format!("data/nfl/elo-{}.json", history.through_season + 1));
     fs::write(&seed, "untouched seed").unwrap();
+    let data = tool.data_files();
     let (report, stderr) = tool.saved_report(report_name, Utc::now());
     assert_eq!(report["config_sha256"], digest(&config_bytes));
     assert_eq!(report["history_sha256"], digest(&history_bytes));
     let (repeated, _) = tool.saved_report(report_name, run_at(&report));
     assert_eq!(without_run_at(&report), without_run_at(&repeated));
     assert_eq!(fs::read(tool.path().join("nfl.json")).unwrap(), config_bytes);
-    assert_eq!(fs::read(tool.path().join("data/nfl/history.json")).unwrap(), history_bytes);
-    assert_eq!(fs::read_to_string(seed).unwrap(), "untouched seed");
-    assert_eq!(fs::read_dir(tool.path().join("data/nfl")).unwrap().count(), 2);
+    assert_eq!(tool.data_files(), data);
     (report, stderr)
 }
 

@@ -1,12 +1,6 @@
 use anyhow::Result;
-use chrono::Utc;
 use clap::Parser;
-use rating_core::{
-    SIMULATED_SEASONS_SCHEMA_VERSION, SimulatedSeasons, digest, load_history, load_league_config, lock,
-    tuning::{Split, validate},
-    walk_forward::predict_season,
-    write_json,
-};
+use rating_core::{SimulatedSeasons, load_history, load_league_config, lock, tuning::Split, write_json};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -34,7 +28,6 @@ struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let generated_at = Utc::now().to_rfc3339();
     let (cfg, config_bytes) = load_league_config(&args.config_dir, &args.league)?;
     let split = Split::resolve(
         &cfg,
@@ -46,30 +39,14 @@ fn main() -> Result<()> {
     let dir = args.data_dir.join(&cfg.id);
     let _lock = lock(&dir.join("simulated-seasons.lock"))?;
     let (history, history_bytes) = load_history(&args.data_dir, &cfg)?;
-    validate(&history, &cfg, split)?;
     let (first, last) = (split.tune_end + 1, split.test_end);
     eprintln!("Simulating held-out seasons {first}–{last} with the configured settings...");
-    let seasons = (first..=last)
-        .map(|season| {
-            let predicted = predict_season(&history, &cfg, season)?;
-            eprintln!("Predicted {} games in season {season}", predicted.games.len());
-            Ok(predicted)
-        })
-        .collect::<Result<Vec<_>>>()?;
-    let games: usize = seasons.iter().map(|s| s.games.len()).sum();
-    let predictions = SimulatedSeasons {
-        schema_version: SIMULATED_SEASONS_SCHEMA_VERSION,
-        league: cfg.id.clone(),
-        generated_at,
-        history_sha256: digest(&history_bytes),
-        config_sha256: digest(&config_bytes),
-        split,
-        elo_settings: cfg.elo.clone(),
-        bayesian_settings: cfg.bayesian.clone(),
-        seasons,
-    };
+    let simulated = SimulatedSeasons::simulate(&history, &history_bytes, &cfg, &config_bytes, split, |predicted| {
+        eprintln!("Predicted {} games in season {}", predicted.games.len(), predicted.season);
+    })?;
+    let games: usize = simulated.seasons.iter().map(|s| s.games.len()).sum();
     let path = dir.join("simulated-seasons.json");
-    write_json(&path, &predictions)?;
+    write_json(&path, &simulated)?;
     println!(
         "Saved predictions for {games} games in seasons {first}–{last} to {}",
         path.display()

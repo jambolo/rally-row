@@ -36,7 +36,7 @@ Dependency install-script permissions and release-age exceptions are in
 | `apps/generate-preseason-seed/` | Rust seed generator: replays a league's history with Elo and writes its preseason seed `data/<id>/elo-<season>.json` |
 | `apps/elo-tune/` | Offline Elo parameter search and held-out evaluation |
 | `apps/bayes-tune/` | Offline Bayesian parameter search with fixed Elo and held-out evaluation |
-| `apps/evaluate-model/` | Offline scoring of Bayesian and in-season Elo predictions on held-out seasons, made with the configured settings |
+| `apps/evaluate-model/` | Offline scoring of the held-out Bayesian and in-season Elo predictions that `simulate-season` saves |
 | `apps/simulate-season/` | Offline simulation of the held-out seasons: writes every game's pregame Bayesian and Elo predictions to `data/<id>/simulated-seasons.json` |
 | `apps/web/src/` | Browser app: league registry (`leagues.ts`) and league selection (`selection.ts`), contracts, source adapters and their registry (`adapters/`), Bayesian model, service and refresh worker, IndexedDB persistence (`persistence.ts`), small-key localStorage (`small-store.ts`), React interface |
 | `apps/web/test/` | Vitest tests: model, adapters and parity fixtures, league selection and switching, storage, startup/cache, identity |
@@ -248,42 +248,38 @@ After applying tuned parameters, regenerate Elo seeds and rebuild the site.
 
 `evaluate-model` scores the model's predictions, made with the configured (tuned) settings, on a league's
 held-out seasons. It compares two predictors on the same games: the Bayesian model and Elo ratings updated after
-every game. It uses the held-out seasons because the tuners never use them to select parameters. Like the tuners,
-it runs offline against `data/<id>/history.json`. Method and report contents:
+every game. It uses the held-out seasons because the tuners never use them to select parameters. It runs offline
+and scores the predictions that [`simulate-season`](#season-simulation) saves in `data/<id>/simulated-seasons.json`,
+rejecting a file whose configuration or history hash doesn't match the current files. Method and report contents:
 [Model evaluation](docs/model.md#model-evaluation); what the scores mean and how to compare them:
 [Reading the scores](docs/model.md#reading-the-scores).
 
 ```powershell
+cargo run --release -p simulate-season -- --league nfl
 cargo run --release -p evaluate-model -- --league nfl
-cargo run --release -p evaluate-model -- --league mlb
 
 # Print the full JSON report instead of the summary
 cargo run --release -p evaluate-model -- --league nfl --json
 
 # Also save the JSON report
 cargo run --release -p evaluate-model -- --league nfl --report-dir target
-
-# Split overrides; the held-out seasons are tune_end + 1 through test_end
-cargo run --release -p evaluate-model -- --league nfl --tune-end 2022 --test-end 2025
 ```
 
 Unlike the tuners, `evaluate-model` prints a human-readable summary table to stdout by default. Its layout is not
 a stable format; programs should pass `--json`, which prints the full JSON report to stdout instead of the
 summary. Progress messages go to stderr either way. `--report-dir` also writes the JSON report, in either mode, to
-`model-evaluation-report-<league>-<YYYY-MM-DD>.json` using the UTC run date. Split defaults and overrides
-(`--tune-start`, `--tune-end`, `--test-end`) match `bayes-tune`: `bayes_tune`, falling back to `elo_tune`, so
-both shipped leagues evaluate 2023–2025. The tool validates the split as the tuners do, and its notes flag any
-held-out season that falls within a configured tuning range. The MLB run takes a few seconds in a release
-build. The tool scores whatever the configuration holds, so apply tuned parameters before running it. Options, the
-summary, and the report fields: [Model evaluation](docs/model-evaluation.md).
+`model-evaluation-report-<league>-<YYYY-MM-DD>.json` using the UTC run date. The held-out seasons are the
+simulation's, so `simulate-season`'s split options choose them, and the report's notes flag any held-out season that
+falls within a configured tuning range. The MLB run takes under a second in a release build. After applying tuned
+parameters, rerun `simulate-season` before it. Options, the summary, and the report fields:
+[Model evaluation](docs/model-evaluation.md).
 
 ## Season simulation
 
 `simulate-season` simulates a league's held-out seasons with the configured settings, one UTC date at a time,
 and writes every game's pregame Bayesian and Elo predictions to `data/<id>/simulated-seasons.json` for
-evaluation tools. They are the predictions `evaluate-model` scores. Like that tool, it runs offline against
-`data/<id>/history.json`, and its split defaults, overrides, and checks match `evaluate-model`, so both shipped
-leagues simulate 2023–2025.
+evaluation tools; `evaluate-model` scores them. Like the tuners, it runs offline against `data/<id>/history.json`,
+and its split defaults, overrides, and checks match `bayes-tune`, so both shipped leagues simulate 2023–2025.
 
 ```powershell
 cargo run --release -p simulate-season -- --league nfl
@@ -293,7 +289,8 @@ cargo run --release -p simulate-season -- --league mlb
 cargo run --release -p simulate-season -- --league nfl --tune-end 2022 --test-end 2025
 ```
 
-The file records SHA-256 hashes of the configuration and history, so rerun the tool after either changes. A failed
+The file records SHA-256 hashes of the configuration and history, and `evaluate-model` rejects a file whose hashes
+don't match, so rerun the tool after either changes. A failed
 run leaves the previous file in place. The MLB run takes about 7 seconds in a release build. Options, the
 simulation, the file format, and how to check a file:
 [Season simulation](docs/season-simulation.md).

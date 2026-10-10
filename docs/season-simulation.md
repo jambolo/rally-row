@@ -1,9 +1,8 @@
 # Season simulation
 
 `simulate-season` simulates a league's held-out seasons with the configured settings and saves every game's
-pregame predictions to `data/<id>/simulated-seasons.json`. Evaluation tools can read this file instead of refitting
-the model. It holds the same Bayesian and Elo predictions that [`evaluate-model`](model-evaluation.md) scores, so
-scoring the file as [Reading the scores](model.md#reading-the-scores) describes reproduces that tool's numbers.
+pregame predictions to `data/<id>/simulated-seasons.json`. [`evaluate-model`](model-evaluation.md) scores this file,
+and other evaluation tools can read it instead of refitting the model.
 
 ## Running the tool
 
@@ -27,8 +26,9 @@ cargo run --release -p simulate-season -- --league nfl --tune-end 2022 --test-en
 | `--tune-end <year>` | Last tuning season; the held-out seasons follow it. Default `bayes_tune.tune_end`, then `elo_tune.tune_end`. |
 | `--test-end <year>` | Last held-out season; default `bayes_tune.test_end`, then `elo_tune.test_end`. |
 
-The split defaults and checks match [`evaluate-model`](model-evaluation.md), so both shipped
-leagues simulate 2023–2025. The history must cover every held-out season with completed games, and the last
+The split defaults and checks match [`bayes-tune`](bayesian-tuning.md), so both shipped leagues simulate 2023–2025
+([Seasons](elo-tuning.md#seasons) lists the checks and their errors). `evaluate-model` scores the seasons the split
+holds out. The history must cover every held-out season with completed games, and the last
 held-out season must precede the current season.
 
 Progress goes to stderr, and stdout gets one line naming the saved file. The file is written only after every season
@@ -36,7 +36,8 @@ is simulated, and it is replaced atomically, so a failed run leaves the previous
 `data/<id>/simulated-seasons.lock`, keeps two runs from writing the same league at once. In a release build, the
 NFL run takes about a second and the MLB run about 7 seconds.
 
-Rerun the tool after any change to the league's configuration or history. The file records hashes of both inputs
+Rerun the tool after any change to the league's configuration or history. The file records hashes of both inputs,
+and `evaluate-model` rejects a file whose hashes don't match
 ([Checking that a file is current](#checking-that-a-file-is-current)).
 
 ## How the seasons are simulated
@@ -134,7 +135,8 @@ Each prediction has these fields:
 A file describes the inputs it was generated from. Before using it, check that `schema_version` is `1` and that
 `config_sha256` and `history_sha256` equal the SHA-256 hashes of the current `config/<id>.json` and
 `data/<id>/history.json` bytes (`rating_core::digest` in Rust). If either differs, rerun the tool. An incompatible
-change to the format increases `schema_version`.
+change to the format increases `schema_version`. In Rust, `SimulatedSeasons::load` loads a file and makes these
+checks, as `evaluate-model` does.
 
 ### Equal-strength baseline
 

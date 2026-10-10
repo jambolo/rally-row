@@ -54,12 +54,13 @@ binaries in `apps/` are thin CLIs over it, so logic two tools share belongs in t
    audit, `data/<id>/elo-audit-<season>.json`. The seed embeds SHA-256 hashes of the config and history bytes. The browser and the backtest reject a seed whose hashes don't match,
    so rerun `generate-preseason-seed` after any config or history change.
 3. `elo-tune` and `bayes-tune` are offline parameter searches. They never modify config.
-4. `evaluate-model` scores the model's predictions, made with the configured settings, on held-out seasons, which
-   tuning never uses. It compares Bayesian predictions with in-season Elo ratings.
-5. `simulate-season --league <id>` simulates the same held-out seasons one UTC date at a time and writes every
-   game's pregame Bayesian and Elo predictions to `data/<id>/simulated-seasons.json` for evaluation tools. The file
-   embeds config and history hashes; consumers should reject a file whose hashes don't match. The per-season
-   prediction (`walk_forward::predict_season`) and the file contract (`SimulatedSeasons`) live in `rating-core`.
+4. `simulate-season --league <id>` simulates the held-out seasons, which tuning never uses, one UTC date at a time
+   with the configured settings and writes every game's pregame Bayesian and Elo predictions to
+   `data/<id>/simulated-seasons.json` for evaluation tools. The file embeds config and history hashes; consumers
+   reject a file whose hashes don't match, as `SimulatedSeasons::load` does. The per-season prediction
+   (`walk_forward::predict_season`) and the file contract (`SimulatedSeasons`) live in `rating-core`.
+5. `evaluate-model` scores the predictions in `simulated-seasons.json` without refitting the model. It compares
+   Bayesian predictions with in-season Elo ratings.
 
 The custom `projectData` plugin in `apps/web/vite.config.ts` serves the files the app reads from the root `config/`
 and `data/` directories in dev, and copies them into the build: `config/<id>.json`, `data/<id>/elo-<season>.json`, and
