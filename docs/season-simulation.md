@@ -60,7 +60,7 @@ Each held-out season is replayed as the app would have run it during that season
 No prediction sees its own result or any result from the same UTC date. The app instead uses each source's pregame
 day, so for MLB a late game whose UTC start falls on the day after its official date is predicted here with the
 earlier games of that official date, unlike in the app
-([Pregame reconstruction and backtesting](model.md#pregame-reconstruction-and-backtesting)).
+([Pregame reconstruction](model.md#pregame-reconstruction)).
 
 ## File format
 

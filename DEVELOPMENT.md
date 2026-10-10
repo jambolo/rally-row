@@ -40,7 +40,6 @@ Dependency install-script permissions and release-age exceptions are in
 | `apps/simulate-season/` | Offline simulation of the held-out seasons: writes every game's pregame Bayesian and Elo predictions to `data/<id>/simulated-seasons.json` |
 | `apps/web/src/` | Browser app: league registry (`leagues.ts`) and league selection (`selection.ts`), contracts, source adapters and their registry (`adapters/`), Bayesian model, service and refresh worker, IndexedDB persistence (`persistence.ts`), small-key localStorage (`small-store.ts`), React interface |
 | `apps/web/test/` | Vitest tests: model, adapters and parity fixtures, league selection and switching, storage, startup/cache, identity |
-| `apps/web/scripts/` | Node backtest |
 | `crates/rating-core/` | Shared Rust library: data contracts, league configuration, source adapters and their registry (`src/adapters/`), file IO, Elo replay, Bayesian model, tuning validation and parameter search, season-by-season prediction, forecast scores |
 | `crates/rating-core/tests/fixtures/` | Rust/TypeScript parity fixtures: `bayesian-parity.json` (Bayesian fit) and `mlb-statsapi.json` (MLB adapter) |
 | `crates/test-support/` | Rust test helpers shared by every crate's tests: league configs, history fixtures, and command-line checks the tools have in common |
@@ -59,7 +58,6 @@ Each tool has its own page covering its options, checks, output, and errors:
 | `bayes-tune` | `cargo run --release -p bayes-tune -- --league <id>` | [Bayesian tuning](docs/bayesian-tuning.md) |
 | `evaluate-model` | `cargo run --release -p evaluate-model -- --league <id>` | [Model evaluation](docs/model-evaluation.md) |
 | `simulate-season` | `cargo run --release -p simulate-season -- --league <id>` | [Season simulation](docs/season-simulation.md) |
-| Node backtest | `pnpm -C apps/web backtest -- --league <id>` | [Backtesting](docs/backtesting.md) |
 
 ## Data and configuration
 
@@ -85,7 +83,7 @@ cargo run --release -p import-history -- --league mlb --through-season 2025
 cargo run --release -p generate-preseason-seed -- --league mlb --target-season 2026
 ```
 
-All command-line programs and the backtest take these options:
+All command-line programs take these options:
 
 | Option | Programs | Meaning |
 | --- | --- | --- |
@@ -96,16 +94,16 @@ All command-line programs and the backtest take these options:
 | `--input <file>...` | `import-history` | Reads saved provider files instead of downloading: one nflverse games CSV (NFL), one Stats API schedule JSON per season from `history_start` through `--through-season` (MLB), or one canonical JSON envelope. |
 | `--target-season <year>` | `generate-preseason-seed` | Seed season; default the current season. |
 
-The tuners, the model evaluation, the season simulation, and the backtest take further options; see
-[Tuning](#tuning), [Model evaluation](#model-evaluation), [Season simulation](#season-simulation), and
-[Backtesting](#backtesting). [History import](docs/history-import.md) and
+The tuners, the model evaluation, and the season simulation take further options; see
+[Tuning](#tuning), [Model evaluation](#model-evaluation), and [Season simulation](#season-simulation).
+[History import](docs/history-import.md) and
 [Preseason seed](docs/preseason-seed.md) describe `import-history` and `generate-preseason-seed` in full, including
 the seed's format.
 
 The importer replaces `data/<id>/history.json` only when every imported season has completed games and the
 league's completion marker (a completed Super Bowl for NFL, a completed World Series game for MLB); on
 failure the previous file stays. `generate-preseason-seed` embeds SHA-256 hashes of the configuration and history in
-its seed, and the browser and backtest reject a seed whose hashes do not match.
+its seed, and the browser rejects a seed whose hashes do not match.
 
 - New season: rerun `import-history` and `generate-preseason-seed` for the league, then rebuild the site. Import
   only historical seasons.
@@ -295,32 +293,10 @@ run leaves the previous file in place. The MLB run takes about 7 seconds in a re
 simulation, the file format, and how to check a file:
 [Season simulation](docs/season-simulation.md).
 
-## Backtesting
-
-The Node backtest reads a league's local history and Elo seed, then downloads the evaluated season's games
-through the league's source adapter, so it requires network access. `--season`
-(default the current season) selects the evaluated season; the seed must be trained through the previous
-season. Each UTC date is predicted from earlier UTC dates only.
-
-```powershell
-# Evaluate 2025 with priors trained through 2024
-cargo run --release -p import-history -- --league nfl --through-season 2024 --data-dir data-backtest
-cargo run --release -p generate-preseason-seed -- --league nfl --target-season 2025 --data-dir data-backtest
-pnpm -C apps/web backtest -- --league nfl --season 2025 --data-dir data-backtest
-cargo run --release -p import-history -- --league mlb --through-season 2024 --data-dir data-backtest
-cargo run --release -p generate-preseason-seed -- --league mlb --target-season 2025 --data-dir data-backtest
-pnpm -C apps/web backtest -- --league mlb --season 2025 --data-dir data-backtest
-```
-
-For MLB, a late game whose UTC start falls on the day after its official date is predicted in the next UTC
-date's batch, so earlier games of the same official date can inform it; see
-[Pregame reconstruction and backtesting](docs/model.md#pregame-reconstruction-and-backtesting). Options, checks, and
-output: [Backtesting](docs/backtesting.md).
-
 ## References
 
 - [Browser usage](README.md)
-- [Statistical model and backtesting methodology](docs/model.md)
+- [Statistical model and evaluation methodology](docs/model.md)
 - [Adding leagues, source adapters, and data formats](docs/extending.md)
 - [History import](docs/history-import.md)
 - [Preseason seed and its file format](docs/preseason-seed.md)
@@ -328,6 +304,5 @@ output: [Backtesting](docs/backtesting.md).
 - [Bayesian tuning and its report](docs/bayesian-tuning.md)
 - [Model evaluation and its report](docs/model-evaluation.md)
 - [Season simulation and its file format](docs/season-simulation.md)
-- [Backtesting](docs/backtesting.md)
 - [Franchise identities and aliases](docs/team-history.md)
 - [Branding and messaging](docs/branding.md)

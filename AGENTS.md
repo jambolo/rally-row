@@ -5,7 +5,7 @@ This file provides guidance to AI when working with code in this repository.
 Rally Row predicts NFL and MLB game outcomes. A Rust workspace generates static league data offline, and a
 browser-only React app (`apps/web`) fits a Bayesian model in a Web Worker. There is no backend: GitHub Pages
 serves the app with `config/` and `data/` as static JSON. See [DEVELOPMENT.md](DEVELOPMENT.md) for the full
-command reference, release process, tuning and backtesting.
+command reference, release process, tuning and model evaluation.
 
 ## Commands
 
@@ -51,7 +51,7 @@ binaries in `apps/` are thin CLIs over it, so logic two tools share belongs in t
    writes `data/<id>/history.json`. It replaces the file only if every season is complete, so a failure leaves the
    previous file in place.
 2. `generate-preseason-seed --league <id>` replays history and writes `data/<id>/elo-<season>.json` and its replay
-   audit, `data/<id>/elo-audit-<season>.json`. The seed embeds SHA-256 hashes of the config and history bytes. The browser and the backtest reject a seed whose hashes don't match,
+   audit, `data/<id>/elo-audit-<season>.json`. The seed embeds SHA-256 hashes of the config and history bytes. The browser rejects a seed whose hashes don't match,
    so rerun `generate-preseason-seed` after any config or history change.
 3. `elo-tune` and `bayes-tune` are offline parameter searches. They never modify config.
 4. `simulate-season --league <id>` simulates the held-out seasons, which tuning never uses, one UTC date at a time
@@ -119,7 +119,7 @@ the CD workflow then tags them and merges `master` back into `develop`. Pages de
 ## Docs map
 
 - `README.md`: user-facing behavior of the app, described in detail. Keep it in sync with UI changes.
-- `DEVELOPMENT.md`: setup, CLI options, checks, releases, tuning, model evaluation, backtesting.
+- `DEVELOPMENT.md`: setup, CLI options, checks, releases, tuning, model evaluation, season simulation.
 - `docs/model.md`: statistical methodology (Elo, the Davidson–Bradley–Terry Bayesian model, two-way
   moneylines, tuning, model evaluation).
 - `docs/extending.md`: adding leagues and source adapters, and the parity-fixture table.
@@ -131,4 +131,3 @@ the CD workflow then tags them and merges `master` back into `develop`. Pages de
   - `docs/bayesian-tuning.md`: `bayes-tune` and its report.
   - `docs/model-evaluation.md`: `evaluate-model`, its summary, and its report.
   - `docs/season-simulation.md`: `simulate-season`, its season simulation, and the `simulated-seasons.json` format.
-  - `docs/backtesting.md`: the Node backtest (`apps/web/scripts/backtest.ts`).

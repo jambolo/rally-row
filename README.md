@@ -218,8 +218,8 @@ current-season wins, losses, and ties. It accounts for opponent strength, home a
 tie rules, and uncertainty to produce matchup probabilities. Both leagues use the same model with their own
 configured settings.
 
-The model does not use score margins, injuries, rosters, or betting markets. Evaluation tools use
-chronological backtests and separate tuning and held-out seasons.
+The model does not use score margins, injuries, rosters, or betting markets. Evaluation tools predict past
+seasons one date at a time from earlier results only, and keep tuning and held-out seasons separate.
 
 See [Statistical model](docs/model.md) for data sources and their terms, formulas, model settings, parameter
 selection, and limitations.

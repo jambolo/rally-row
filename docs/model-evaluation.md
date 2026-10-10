@@ -66,7 +66,7 @@ predicted one UTC date at a time from the results of earlier dates only:
 - **Elo**: the preseason ratings, updated after every earlier game. Its three outcome probabilities apply the Davidson
   tie term to the pregame Elo difference.
 - **Equal strength**: no home advantage, the non-tie probability split evenly, and the season's tie weight at equal
-  strength, as in the [backtest](backtesting.md).
+  strength.
 
 ## Summary
 

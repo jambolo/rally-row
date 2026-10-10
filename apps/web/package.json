@@ -13,8 +13,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "docs": "typedoc src/index.ts",
-    "backtest": "tsx scripts/backtest.ts"
+    "docs": "typedoc src/index.ts"
   },
   "keywords": [],
   "author": "John Bolton <jambolo@users.noreply.github.com> (https://jambolo.github.io)",
@@ -38,7 +37,6 @@
     "eslint": "^10.12.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "prettier": "^3.9.9",
-    "tsx": "^4.23.15",
     "typedoc": "^0.28.20",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.0",

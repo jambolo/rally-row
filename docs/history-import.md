@@ -15,8 +15,8 @@ The importer needs network access unless `--input` supplies saved provider files
 cargo run --release -p import-history -- --league nfl
 cargo run --release -p import-history -- --league mlb
 
-# Import through an earlier season, for example for a backtest
-cargo run --release -p import-history -- --league nfl --through-season 2024 --data-dir data-backtest
+# Import through an earlier season into a separate data directory
+cargo run --release -p import-history -- --league nfl --through-season 2024 --data-dir data-2024
 
 # Read a saved provider file instead of downloading
 cargo run --release -p import-history -- --league nfl --input games.csv

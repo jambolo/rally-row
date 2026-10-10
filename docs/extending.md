@@ -7,7 +7,7 @@ Adding a league takes these steps:
 1. Write its configuration, `config/<id>.json` ([Configuration](#configuration)).
 2. Use an existing source adapter, or add one in both languages ([Source adapters](#source-adapters)).
 3. Add its id to the browser's league registry ([League registry](#league-registry)).
-4. Generate its history and Elo seed, then tune and backtest it ([Generate and publish data](#generate-and-publish-data)).
+4. Generate its history and Elo seed, then tune and evaluate it ([Generate and publish data](#generate-and-publish-data)).
 5. Add its `import-history` and `generate-preseason-seed` invocations to `.github/workflows/pages.yml` so the site publishes its data.
 
 ## Configuration
@@ -157,7 +157,7 @@ The Rust trait `SourceAdapter` in `crates/rating-core/src/adapters/mod.rs` serve
 
 The registry `ADAPTERS` in the same file lists `NflverseCsv`, `CanonicalJson`, and `MlbStatsApi`, in the modules `nflverse_csv.rs`, `canonical_json.rs`, and `mlb_statsapi.rs`. `adapter_for(kind)` returns an adapter or fails with `Unknown source adapter`.
 
-The TypeScript interface `SourceAdapter` in `apps/web/src/adapters/types.ts` serves the browser and the backtest:
+The TypeScript interface `SourceAdapter` in `apps/web/src/adapters/types.ts` serves the browser:
 
 - `kind`, `strictSourceIds`, and optional `sourceStartTimes` (the adapter supplies each game's UTC start time).
 - `resultPolicy`: `summary` for the status card and `detail` for **How these predictions work**.
@@ -257,7 +257,7 @@ The importer serializes this required timestamp as RFC 3339 UTC with `Z`. Progra
 game's start time, require an explicit offset, and sort games by `(season, start_time_utc, id)`.
 Missing, null, or malformed timestamps are errors.
 
-The browser and Node backtest only check the history file's hash; they get game records from the provider.
+The browser only checks the history file's hash; it gets game records from the provider.
 
 Generate the Elo seed from the published history and configuration so its SHA-256 hashes match those files.
 
@@ -283,7 +283,7 @@ The IndexedDB module is `apps/web/src/persistence.ts`, and `apps/web/src/small-s
 
 ## Generate and publish data
 
-Every command-line program and the backtest take `--league <id>`, `--config-dir <dir>` (default `config`), and `--data-dir <dir>` (default `data`). [Data and configuration](../DEVELOPMENT.md#data-and-configuration) lists every option and the commands for the shipped leagues; [Tuning](../DEVELOPMENT.md#tuning), [Model evaluation](../DEVELOPMENT.md#model-evaluation), and [Backtesting](../DEVELOPMENT.md#backtesting) cover evaluation. Each tool has its own page: [History import](history-import.md), [Preseason seed](preseason-seed.md), [Elo tuning](elo-tuning.md), [Bayesian tuning](bayesian-tuning.md), [Model evaluation](model-evaluation.md), [Season simulation](season-simulation.md), and [Backtesting](backtesting.md). For a new league, generate its history and current-season seed:
+Every command-line program takes `--league <id>`, `--config-dir <dir>` (default `config`), and `--data-dir <dir>` (default `data`). [Data and configuration](../DEVELOPMENT.md#data-and-configuration) lists every option and the commands for the shipped leagues; [Tuning](../DEVELOPMENT.md#tuning), [Model evaluation](../DEVELOPMENT.md#model-evaluation), and [Season simulation](../DEVELOPMENT.md#season-simulation) cover evaluation. Each tool has its own page: [History import](history-import.md), [Preseason seed](preseason-seed.md), [Elo tuning](elo-tuning.md), [Bayesian tuning](bayesian-tuning.md), [Model evaluation](model-evaluation.md), and [Season simulation](season-simulation.md). For a new league, generate its history and current-season seed:
 
 ```text
 cargo run --release -p import-history -- --league <id>

@@ -395,7 +395,7 @@ pub fn run(cfg: &LeagueConfig, simulated: SimulatedSeasons) -> Result<Report> {
         "Bayesian: each UTC date is predicted from a fresh posterior fit to earlier dates of the season, as in bayes-tune.",
         "Elo: ratings update after every game in start order, as in the historical replay, but each UTC date is predicted from the ratings at the start of that date, so neither method sees same-day outcomes. elo-tune also updates between games on the same date, so its held-out MSE can differ slightly.",
         "Elo three-way probabilities apply the Davidson tie term (the season's tie weight, zero where ties are not allowed) to the pregame Elo difference, keeping Elo's win odds in decisive games. Elo's expected score is its logistic expected score; the other methods use P(home win) + P(tie)/2.",
-        "Equal strength: no home advantage, the non-tie probability split evenly, and the season's tie weight at equal strength, as in the Node backtest.",
+        "Equal strength: no home advantage, the non-tie probability split evenly, and the season's tie weight at equal strength.",
         "Accuracy counts decisive games whose favored team won (an exact toss-up earns 1/2); ties are excluded from accuracy.",
         "Log loss uses natural logs and a 1e-15 probability floor; Brier score sums squared errors across all three outcomes; expected-score MSE compares the expected fractional home score with the observed score (win 1, tie 1/2, loss 0).",
         "Positive bayesian_advantage means the Bayesian predictions scored better (lower loss or higher accuracy). Standard errors are descriptive: held-out seasons are few, and games within a season share team-strength errors.",

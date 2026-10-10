@@ -182,7 +182,7 @@ The [NFL configuration](../config/nfl.json) and the [MLB configuration](../confi
 The smoothing rate is not the predicted tie probability for every matchup. The estimated tie parameter,
 the teams' relative strengths, and the game phase determine that probability.
 
-## Pregame reconstruction and backtesting
+## Pregame reconstruction
 
 Completed games show the actual result alongside the expected winner and win probability reconstructed
 from the preseason seed and results from earlier days only. Each source defines a game's pregame day, and
@@ -196,21 +196,16 @@ only results from strictly earlier days count:
 
 Same-day and later outcomes are excluded because the data does not record game-end timestamps.
 
-The offline Bayesian [backtest](backtesting.md) and Bayesian tuning use earlier **UTC dates** only, for every league.
+Bayesian tuning and the [season simulation](season-simulation.md) use earlier **UTC dates** only, for every league.
 Same-day outcomes cannot influence one another, even with mixed source timezones. For MLB, a late game whose
 UTC start falls on the day after its official date is predicted in the next UTC date's batch, so earlier
 games of the same official date can inform it there, unlike in the app. For each evaluated season,
-preseason ratings and tie estimates use only earlier seasons.
-
-The backtest compares predictions with an equal-strength baseline using multiclass Brier score and
-natural-log loss, both defined in [Reading the scores](#reading-the-scores); lower values are better. The
-baseline splits non-tie probability equally between the teams, with no home advantage, and uses the preseason
-tie parameter at equal strength in phases that allow ties. Parameter selection and evaluation are separate:
+preseason ratings and tie estimates use only earlier seasons. Parameter selection and evaluation are separate:
 later held-out seasons are scored only after the parameters are chosen.
 
 ## Reading the scores
 
-The backtest, both tuners, and `evaluate-model` score forecasts of completed games. A forecast gives each game's
+Both tuners and `evaluate-model` score forecasts of completed games. A forecast gives each game's
 three outcomes probabilities `p_H` (home win), `p_A` (away win), and `p_T` (tie) that sum to one, and `o` is
 the outcome that happened. Each score is averaged over games:
 
@@ -404,8 +399,8 @@ every predictor starts from them:
   probabilities apply the Davidson tie term to the pregame difference `d = ln(10)(R_h - R_a + H)/s` with the
   season's tie weight, which is zero where ties are not allowed. This keeps Elo's odds in decisive games:
   `P(h) / (P(h) + P(a)) = E_h`.
-- **Equal strength**: the backtest's reference baseline, with no home advantage, the non-tie probability split
-  evenly, and the season's tie weight at equal strength.
+- **Equal strength**: a reference baseline with no home advantage, the non-tie probability split evenly, and the
+  season's tie weight at equal strength.
 
 Each predictor is scored with the four measures defined in [Reading the scores](#reading-the-scores): log loss,
 Brier score, expected-score MSE, and accuracy. The report gives equally weighted season means, pooled scores,
@@ -447,7 +442,7 @@ Each probability is the share of 10,000 simulations, so its Monte Carlo standard
 - A relocated franchise keeps its rating history because ratings follow team identity. This does not assume the roster stayed the same.
 - Result timing depends on the source. The NFL source doesn't say whether a score is final, so the app waits until the next calendar day in Eastern Time before using a reported outcome. MLB results count as soon as the Stats API marks a game final. Later corrections are accepted at the next successful update.
 - MLB games are never neutral-site games in the model, including games at special or international venues.
-- Backtests refit using earlier dates only. Evaluate held-out seasons and calibration before drawing conclusions about model quality.
+- Tuning and the season simulation refit using earlier dates only. Evaluate held-out seasons and calibration before drawing conclusions about model quality.
 - Postseason odds keep each team's drawn strength fixed through a simulated season and postseason; simulated results never update ratings.
 - Postseason tiebreakers use wins, losses, and ties only. Rules based on points or other statistics are not modeled, so ties those rules would settle are decided by random draws.
 - The postseason simulation models only each league's current playoff format, as configured.

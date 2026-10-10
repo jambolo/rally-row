@@ -4,8 +4,7 @@
 for one season to `data/<id>/elo-<season>.json`. The seed holds each team's preseason rating and the tie weight ν.
 The replay behind it goes to a separate audit file, `data/<id>/elo-audit-<season>.json`, which the site doesn't
 publish.
-The browser's Bayesian model starts from them ([Bayesian prior](model.md#bayesian-prior)), and so does the Node
-[backtest](backtesting.md).
+The browser's Bayesian model starts from them ([Bayesian prior](model.md#bayesian-prior)).
 
 ## Running the tool
 
@@ -17,8 +16,8 @@ cargo run --release -p generate-preseason-seed -- --league nfl
 cargo run --release -p generate-preseason-seed -- --league mlb
 
 # Seed an earlier season from history imported through the season before it
-cargo run --release -p import-history -- --league nfl --through-season 2024 --data-dir data-backtest
-cargo run --release -p generate-preseason-seed -- --league nfl --target-season 2025 --data-dir data-backtest
+cargo run --release -p import-history -- --league nfl --through-season 2024 --data-dir data-2024
+cargo run --release -p generate-preseason-seed -- --league nfl --target-season 2025 --data-dir data-2024
 ```
 
 | Option | Meaning |
@@ -60,7 +59,7 @@ preseason values the same way, from the seasons before it.
 ## File format
 
 `EloSeed` in `crates/rating-core/src/lib.rs` defines the file. `seedSchema` in `apps/web/src/contracts.ts` validates
-it in the browser and the backtest.
+it in the browser.
 
 | Field | Contents |
 | --- | --- |
@@ -101,7 +100,7 @@ The browser loads the current season's seed for the selected league. It rejects 
 | `Configuration changed since Elo was calculated; rerun generate-preseason-seed` | `config_sha256` matches the published configuration |
 | `History changed since Elo was calculated; rerun generate-preseason-seed` | `history_sha256` matches the published history hash, `data/<id>/history.sha256` |
 
-The [backtest](backtesting.md) applies the same checks. The hash covers the whole configuration file, so rerun
+The hash covers the whole configuration file, so rerun
 `generate-preseason-seed` after any configuration change, not only a change to `elo` or `bayesian`, and after every
 import. The Pages workflow regenerates every league's history and seed before each build, and its monthly run
 publishes each league's new-season seed after its rollover month.

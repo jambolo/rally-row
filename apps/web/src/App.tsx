@@ -576,8 +576,8 @@ export default function App() {
                 </p>
                 <p>{state.result_policy} Games without a confirmed outcome do not update the ratings.</p>
                 <p>
-                  The parameters are starting settings, not a claim of validated forecasting accuracy. The project includes a
-                  chronological backtest command.
+                  The parameters are starting settings, not a claim of validated forecasting accuracy. The project includes offline
+                  tools that tune them and score them on held-out past seasons.
                 </p>
                 <a href={state.source} target="_blank" rel="noreferrer">
                   View the data source ↗

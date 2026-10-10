@@ -20,7 +20,7 @@ function source(path: string): { file: string; publish: (bytes: Buffer) => Buffe
 }
 
 /** The league configuration and the Rust programs' output live at the project root so the
- * CLIs, the backtest and the site all read one copy. This publishes what the app reads as static assets.
+ * CLIs and the site read one copy. This publishes what the app reads as static assets.
  */
 function projectData(): Plugin {
   const mounts = ['config', 'data'];
