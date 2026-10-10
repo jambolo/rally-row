@@ -17,14 +17,13 @@ const seasonUrl = 'https://statsapi.mlb.com/api/v1/schedule?sportId=1&season=202
 
 function seed(): EloSeed {
   return {
-    schema_version: 1,
+    schema_version: 2,
     league: 'mlb',
     target_season: 2026,
     through_season: 2025,
     generated_at: '2026-01-15T00:00:00Z',
     history_sha256: historyHash,
     config_sha256: configHash,
-    settings: config.elo,
     completed_games: 2400,
     tied_games: 0,
     tie_weight: 0.0003,

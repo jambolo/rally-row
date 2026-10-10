@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use rating_core::{SimulatedSeasons, load_history, load_league_config, lock, tuning::Split, write_json};
+use rating_core::{SimulatedSeasons, load_history, load_league_config, lock, tuning::Split};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -46,7 +46,7 @@ fn main() -> Result<()> {
     })?;
     let games: usize = simulated.seasons.iter().map(|s| s.games.len()).sum();
     let path = dir.join("simulated-seasons.json");
-    write_json(&path, &simulated)?;
+    simulated.save(&path)?;
     println!(
         "Saved predictions for {games} games in seasons {first}–{last} to {}",
         path.display()

@@ -114,7 +114,7 @@ async function setup() {
     async publishConfig(updated: LeagueConfig) {
       const bytes = JSON.stringify(updated);
       const hash = await digest(bytes);
-      const updatedSeed = { ...seed(), config_sha256: hash, settings: updated.elo };
+      const updatedSeed = { ...seed(), config_sha256: hash };
       files.set(configUrl, bytes);
       files.set(seedUrl, JSON.stringify(updatedSeed));
       files.set(

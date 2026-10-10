@@ -349,7 +349,6 @@ it.each([true, false])('refreshes a changed baseline with unchanged games; updat
   const oldHash = await digest(JSON.stringify(oldConfig));
   const oldSeed = structuredClone(updated);
   oldSeed.config_sha256 = oldHash;
-  oldSeed.settings = oldConfig.elo;
   oldSeed.ratings.forEach((r) => (r.elo += 500));
   const url = `${dataBase}/nfl/elo-2026.json`;
   const { published, requests } = publish({ [url]: JSON.stringify(oldSeed) });

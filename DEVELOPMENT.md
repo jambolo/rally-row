@@ -91,6 +91,7 @@ All command-line programs take these options:
 | `--data-dir <dir>` | All | Data directory; default `data`. Files are read and written under `<dir>/<id>/`. |
 | `--through-season <year>` | `import-history` | Last imported season; default the current season minus one. It must be at least `history_start` and before the current season. |
 | `--input <file>...` | `import-history` | Reads saved provider files instead of downloading: one nflverse games CSV (NFL), one Stats API schedule JSON per season from `history_start` through `--through-season` (MLB), or one canonical JSON envelope. |
+| `--refresh` | `import-history` | Downloads every season, including those the saved `history.json` already holds. |
 | `--target-season <year>` | `generate-preseason-seed` | Seed season; default the current season. |
 
 The tuners, the model evaluation, and the season simulation take further options; see
@@ -99,8 +100,9 @@ The tuners, the model evaluation, and the season simulation take further options
 [Preseason seed](docs/preseason-seed.md) describe `import-history` and `generate-preseason-seed` in full, including
 the seed's format.
 
-The importer replaces `data/<id>/history.json` only when every imported season has completed games and the
-league's completion marker (a completed Super Bowl for NFL, a completed World Series game for MLB); on
+The importer keeps the seasons a current `data/<id>/history.json` already holds and downloads only the later ones, so
+a rerun without a new season downloads nothing. It replaces the file only when every imported season has completed
+games and the league's completion marker (a completed Super Bowl for NFL, a completed World Series game for MLB); on
 failure the previous file stays. `generate-preseason-seed` embeds SHA-256 hashes of the configuration and history in
 its seed, and the browser rejects a seed whose hashes do not match.
 
@@ -151,8 +153,8 @@ Workflows in [`.github/workflows/`](.github/workflows/):
   missing project and web tags, then merges `master` into `develop` if it created a tag.
 - `pages.yml`: regenerates history and preseason seeds for every league (`--league nfl`, then `--league mlb`), builds
   the site with `data/` and `config/`, and deploys `apps/web/dist`. Runs on `master` pushes, manual
-  dispatch, and the first Tuesday of each month at 09:17 UTC; the monthly run publishes each league's
-  new-season seed after its configured rollover month. A new league needs its own `import-history` and
+  dispatch, and the first Tuesday at 09:17 UTC of each month that is some league's `season_rollover_month`; that run
+  publishes the league's new-season seed. A new league needs its own `import-history` and
   `generate-preseason-seed` lines in the workflow. Deployment runs separately from CD and does not wait for a release
   to succeed.
 

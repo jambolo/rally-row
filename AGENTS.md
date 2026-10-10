@@ -48,7 +48,8 @@ season-by-season prediction from earlier UTC dates (`walk_forward.rs`), and fore
 binaries in `apps/` are thin CLIs over it, so logic two tools share belongs in the library.
 
 1. `import-history --league <id>` downloads the provider's history through the league's source adapter and
-   writes `data/<id>/history.json`. It replaces the file only if every season is complete, so a failure leaves the
+   writes `data/<id>/history.json`. It keeps the seasons a current file already holds and downloads only later ones
+   (`--refresh` downloads all). It replaces the file only if every season is complete, so a failure leaves the
    previous file in place.
 2. `generate-preseason-seed --league <id>` replays history and writes `data/<id>/elo-<season>.json`. The seed
    embeds SHA-256 hashes of the config and history bytes. The browser rejects a seed whose hashes don't match, so

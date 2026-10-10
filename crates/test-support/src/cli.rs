@@ -182,7 +182,7 @@ pub fn assert_rejects_unusable_history(tool: &ToolDir, cfg: &LeagueConfig, histo
     let split = cfg.elo_tune.as_ref().unwrap();
     tool.write_config(cfg);
     let mut obsolete = serde_json::to_value(history).unwrap();
-    for version in [1, 2] {
+    for version in [1, 2, 3] {
         obsolete["schema_version"] = json!(version);
         tool.write_history(&obsolete);
         assert_contains(&tool.error(&[]), "rerun import-history");

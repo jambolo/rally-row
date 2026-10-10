@@ -247,7 +247,7 @@ pub struct Game {
     pub neutral: bool,
     pub result: Option<Outcome>,
 }
-pub const HISTORY_SCHEMA_VERSION: u32 = 3;
+pub const HISTORY_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameFile {
@@ -257,7 +257,8 @@ pub struct GameFile {
     pub source_url: String,
     pub from_season: i32,
     pub through_season: i32,
-    pub teams: Vec<Team>,
+    /// `LeagueConfig::teams_sha256` of the configuration the games were imported with.
+    pub teams_sha256: String,
     pub games: Vec<Game>,
 }
 #[derive(Debug, Serialize, Deserialize)]
@@ -286,18 +287,18 @@ pub struct EloSeed {
     pub generated_at: String,
     pub history_sha256: String,
     pub config_sha256: String,
-    pub settings: EloSettings,
     pub completed_games: usize,
     pub tied_games: usize,
     pub tie_weight: f64,
     pub ratings: Vec<Rating>,
 }
-pub const SIMULATED_SEASONS_SCHEMA_VERSION: u32 = 1;
+pub const SIMULATED_SEASONS_SCHEMA_VERSION: u32 = 2;
 
 /// `data/<league>/simulated-seasons.json`: pregame predictions for every game of the simulated seasons, made with the
-/// configured settings by simulating each season one UTC date at a time.
+/// configured settings by simulating each season one UTC date at a time. The file saves each game as a
+/// `walk_forward::SavedGame`; `load` restores the rest of the game from `history.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SimulatedSeasons {
+pub struct SimulatedSeasons<G = walk_forward::PredictedGame> {
     pub schema_version: u32,
     pub league: String,
     pub generated_at: String,
@@ -305,9 +306,32 @@ pub struct SimulatedSeasons {
     pub config_sha256: String,
     /// The simulated seasons are `split.tune_end + 1` through `split.test_end`.
     pub split: tuning::Split,
-    pub elo_settings: EloSettings,
-    pub bayesian_settings: BayesianSettings,
-    pub seasons: Vec<walk_forward::SeasonPredictions>,
+    pub seasons: Vec<walk_forward::SeasonPredictions<G>>,
+}
+
+impl<G> SimulatedSeasons<G> {
+    fn map_games<H>(&self, mut f: impl FnMut(&G) -> Result<H>) -> Result<SimulatedSeasons<H>> {
+        let seasons = self
+            .seasons
+            .iter()
+            .map(|s| {
+                Ok(walk_forward::SeasonPredictions {
+                    season: s.season,
+                    tie_weight: s.tie_weight,
+                    games: s.games.iter().map(&mut f).collect::<Result<_>>()?,
+                })
+            })
+            .collect::<Result<_>>()?;
+        Ok(SimulatedSeasons {
+            schema_version: self.schema_version,
+            league: self.league.clone(),
+            generated_at: self.generated_at.clone(),
+            history_sha256: self.history_sha256.clone(),
+            config_sha256: self.config_sha256.clone(),
+            split: self.split,
+            seasons,
+        })
+    }
 }
 
 impl SimulatedSeasons {
@@ -338,20 +362,23 @@ impl SimulatedSeasons {
             history_sha256: digest(history_bytes),
             config_sha256: digest(config_bytes),
             split,
-            elo_settings: cfg.elo.clone(),
-            bayesian_settings: cfg.bayesian.clone(),
             seasons,
         })
     }
 
-    /// Loads `<data_dir>/<league>/simulated-seasons.json` and requires it to be current: this schema, generated from
-    /// `config_bytes` and the current `<data_dir>/<league>/history.json`.
+    /// Writes the file to `path`.
+    pub fn save(&self, path: &Path) -> Result<()> {
+        write_json(path, &self.map_games(|p| Ok(walk_forward::SavedGame::from(p)))?)
+    }
+
+    /// Loads `<data_dir>/<league>/simulated-seasons.json`, requires it to be current (this schema, generated from
+    /// `config_bytes` and the current `<data_dir>/<league>/history.json`), and restores each game from the history.
     pub fn load(data_dir: &Path, cfg: &LeagueConfig, config_bytes: &[u8]) -> Result<Self> {
-        let dir = data_dir.join(&cfg.id);
-        let history_bytes = fs::read(dir.join("history.json")).context("Read history.json; run import-history first")?;
-        let bytes =
-            fs::read(dir.join("simulated-seasons.json")).context("Read simulated-seasons.json; run simulate-season first")?;
-        let file: Self = serde_json::from_slice(&bytes).context("Parse simulated-seasons.json; rerun simulate-season")?;
+        let (history, history_bytes) = load_history(data_dir, cfg)?;
+        let bytes = fs::read(data_dir.join(&cfg.id).join("simulated-seasons.json"))
+            .context("Read simulated-seasons.json; run simulate-season first")?;
+        let file: SimulatedSeasons<walk_forward::SavedGame> =
+            serde_json::from_slice(&bytes).context("Parse simulated-seasons.json; rerun simulate-season")?;
         ensure!(
             file.schema_version == SIMULATED_SEASONS_SCHEMA_VERSION && file.league == cfg.id,
             "Incompatible simulated-seasons.json; rerun simulate-season"
@@ -364,7 +391,17 @@ impl SimulatedSeasons {
             file.history_sha256 == digest(&history_bytes),
             "simulated-seasons.json was generated from a different history.json; rerun simulate-season"
         );
-        Ok(file)
+        let games: BTreeMap<_, _> = history.games.iter().map(|g| (g.id.as_str(), g)).collect();
+        file.map_games(|saved| {
+            let game = games
+                .get(saved.id.as_str())
+                .with_context(|| format!("history.json has no game {}; rerun simulate-season", saved.id))?;
+            Ok(walk_forward::PredictedGame {
+                game: (*game).clone(),
+                bayesian: saved.bayesian,
+                elo: saved.elo,
+            })
+        })
     }
 }
 
@@ -404,8 +441,7 @@ pub fn load_league_config(config_dir: &Path, league: &str) -> Result<(LeagueConf
 /// Load `<data_dir>/<league>/history.json`, returning the parsed file and its bytes.
 pub fn load_history(data_dir: &Path, cfg: &LeagueConfig) -> Result<(GameFile, Vec<u8>)> {
     let bytes = fs::read(data_dir.join(&cfg.id).join("history.json")).context("Read history.json; run import-history first")?;
-    let history = serde_json::from_slice(&bytes)
-        .context("Parse history.json; start_time_utc, numeric round, and round_label are required; rerun import-history")?;
+    let history = serde_json::from_slice(&bytes).context("Parse history.json; rerun import-history")?;
     Ok((history, bytes))
 }
 
@@ -705,6 +741,10 @@ impl LeagueConfig {
         let today = Utc::now().date_naive();
         today.year() - i32::from(today.month() < self.season_rollover_month)
     }
+    /// SHA-256 of the franchise registry as JSON. `history.json` records it because its games depend on the registry.
+    pub fn teams_sha256(&self) -> String {
+        digest(&serde_json::to_vec(&self.teams).expect("Teams serialize to JSON"))
+    }
     pub fn team_id(&self, value: &str) -> String {
         self.aliases.get(value).cloned().unwrap_or_else(|| value.to_owned())
     }
@@ -893,7 +933,7 @@ pub fn build_seed(
 ) -> Result<EloSeed> {
     cfg.validate()?;
     ensure!(
-        history.teams == cfg.teams,
+        history.teams_sha256 == cfg.teams_sha256(),
         "Team identity history changed; rerun import-history before generate-preseason-seed"
     );
     ensure!(
@@ -949,14 +989,13 @@ pub(crate) fn replay_seeds(
             r.elo = regress_rating(r.elo, &cfg.elo);
         }
         let seed = EloSeed {
-            schema_version: 1,
+            schema_version: 2,
             league: cfg.id.clone(),
             target_season: target,
             through_season: target - 1,
             generated_at: generated_at.clone(),
             history_sha256: history_sha256.clone(),
             config_sha256: config_sha256.clone(),
-            settings: cfg.elo.clone(),
             completed_games,
             tied_games: ties.tied_games,
             tie_weight: ties.estimate(&cfg.bayesian),

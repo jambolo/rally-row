@@ -52,7 +52,7 @@ fn seeds_are_chronological_tie_aware_and_regressed_exactly_once() {
     assert_eq!(seed.ratings[0].elo, again.ratings[0].elo);
     assert!(build_seed(&history, &bytes, &cfg, b"config", 2004).is_err());
     let mut obsolete = history.clone();
-    for version in [1, 2] {
+    for version in [1, 2, 3] {
         obsolete.schema_version = version;
         assert!(
             build_seed(&obsolete, &bytes, &cfg, b"config", 2003)
@@ -61,6 +61,16 @@ fn seeds_are_chronological_tie_aware_and_regressed_exactly_once() {
                 .contains("rerun import-history")
         );
     }
+    let mut renamed = cfg.clone();
+    let team = &mut renamed.teams[0];
+    team.name.push_str(" Renamed");
+    team.eras.last_mut().unwrap().name.clone_from(&team.name);
+    assert!(
+        build_seed(&history, &bytes, &renamed, b"config", 2003)
+            .unwrap_err()
+            .to_string()
+            .contains("Team identity history changed")
+    );
     let mut leaked = history;
     leaked.games[0].season = 2003;
     assert!(build_seed(&leaked, &bytes, &cfg, b"config", 2003).is_err());

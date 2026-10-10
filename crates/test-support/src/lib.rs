@@ -32,7 +32,7 @@ pub fn history_file(cfg: &LeagueConfig, seasons: RangeInclusive<i32>, games: Vec
         source_url: cfg.source.url.clone(),
         from_season: *seasons.start(),
         through_season: *seasons.end(),
-        teams: cfg.teams.clone(),
+        teams_sha256: cfg.teams_sha256(),
         games,
     }
 }

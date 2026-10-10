@@ -64,20 +64,18 @@ earlier games of that official date, unlike in the app
 
 ## File format
 
-`SimulatedSeasons` in `crates/rating-core/src/lib.rs` defines the file, and `SeasonPredictions`,
-`PredictedGame`, and `Prediction` in `crates/rating-core/src/walk_forward.rs` define its parts. Rust tools can
-deserialize it with serde.
+`SimulatedSeasons` in `crates/rating-core/src/lib.rs` defines the file, and `SeasonPredictions`, `SavedGame`, and
+`Prediction` in `crates/rating-core/src/walk_forward.rs` define its parts. Rust tools can
+deserialize it with serde as `SimulatedSeasons<SavedGame>`.
 
 | Field | Contents |
 | --- | --- |
-| `schema_version` | `1` |
+| `schema_version` | `2` |
 | `league` | League id matching the configuration |
 | `generated_at` | RFC 3339 UTC timestamp of the run |
 | `history_sha256` | SHA-256 of the `history.json` bytes the run read |
-| `config_sha256` | SHA-256 of the configuration bytes the run read |
+| `config_sha256` | SHA-256 of the configuration bytes the run read; it pins the Elo and Bayesian settings the run used |
 | `split` | `warmup_start`, `tune_start`, `tune_end`, `test_end`; the simulated seasons are `tune_end + 1` through `test_end` |
-| `elo_settings` | The configuration's `elo` block |
-| `bayesian_settings` | The configuration's `bayesian` block |
 | `seasons` | One entry per simulated season, in season order |
 
 Each entry of `seasons` has these fields:
@@ -88,24 +86,13 @@ Each entry of `seasons` has these fields:
 | `tie_weight` | Tie weight ν from the earlier seasons; both predictors use it in phases listed in `ties_allowed_in` |
 | `games` | Every game of the season, in start order |
 
-Each game has every field of a [`history.json` game](extending.md#historical-output), followed by a `bayesian` and an
-`elo` prediction. Every simulated game is completed, so `result` is never null.
+Each game has the `id` of a [`history.json` game](extending.md#historical-output), followed by a `bayesian` and an
+`elo` prediction. The game's other fields, such as its teams, phase, and `result`, are in `history.json`, which
+`history_sha256` pins. Every simulated game is completed, so its `result` is never null.
 
 ```json
 {
   "id": "2023_01_DET_KC",
-  "league": "nfl",
-  "season": 2023,
-  "start_time_utc": "2023-09-08T00:20:00Z",
-  "phase": "regular",
-  "round_label": "REG",
-  "round": 1,
-  "home_team": "KC",
-  "away_team": "DET",
-  "home_source_id": "KC",
-  "away_source_id": "DET",
-  "neutral": false,
-  "result": "away_win",
   "bayesian": {
     "home_win": 0.7169698137311274,
     "away_win": 0.2805971172505295,
@@ -132,11 +119,11 @@ Each prediction has these fields:
 
 ### Checking that a file is current
 
-A file describes the inputs it was generated from. Before using it, check that `schema_version` is `1` and that
+A file describes the inputs it was generated from. Before using it, check that `schema_version` is `2` and that
 `config_sha256` and `history_sha256` equal the SHA-256 hashes of the current `config/<id>.json` and
 `data/<id>/history.json` bytes (`rating_core::digest` in Rust). If either differs, rerun the tool. An incompatible
-change to the format increases `schema_version`. In Rust, `SimulatedSeasons::load` loads a file and makes these
-checks, as `evaluate-model` does.
+change to the format increases `schema_version`. In Rust, `SimulatedSeasons::load` loads a file, makes these
+checks, and joins each game to its `history.json` record, as `evaluate-model` does.
 
 ### Equal-strength baseline
 

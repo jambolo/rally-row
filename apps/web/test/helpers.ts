@@ -13,14 +13,13 @@ export const historyHashFile = `${historyHash}
 
 export function seed(): EloSeed {
   return {
-    schema_version: 1,
+    schema_version: 2,
     league: 'nfl',
     target_season: 2026,
     through_season: 2025,
     generated_at: '2026-09-01T00:00:00Z',
     history_sha256: historyHash,
     config_sha256: configHash,
-    settings: config.elo,
     completed_games: 100,
     tied_games: 1,
     tie_weight: 0.02,

@@ -39,7 +39,7 @@ impl TieHistory {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Probabilities {
     pub home_win: f64,
     pub away_win: f64,

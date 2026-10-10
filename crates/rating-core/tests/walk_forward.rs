@@ -1,6 +1,6 @@
 use rating_core::{
     GameFile, Outcome, apply_game, build_seed, replay_elo,
-    walk_forward::{Preseason, SeasonPredictions, predict_season, preseasons},
+    walk_forward::{Preseason, SavedGame, SeasonPredictions, predict_season, preseasons},
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -100,16 +100,19 @@ fn elo_probabilities_keep_elo_odds_and_drop_ties_where_forbidden() {
 }
 
 #[test]
-fn predicted_games_serialize_the_history_fields_beside_flat_forecasts_and_read_back() {
+fn saved_games_keep_the_history_id_beside_flat_forecasts_and_read_back() {
     let (cfg, history) = evaluation_fixture();
     let predicted = predict_season(&history, &cfg, 2005).unwrap();
-    let json = serde_json::to_value(&predicted).unwrap();
+    let saved = SeasonPredictions {
+        season: predicted.season,
+        tie_weight: predicted.tie_weight,
+        games: predicted.games.iter().map(SavedGame::from).collect(),
+    };
+    let json = serde_json::to_value(&saved).unwrap();
     let game = &json["games"][0];
     let keys = |v: &Value| -> BTreeSet<String> { v.as_object().unwrap().keys().cloned().collect() };
-    let mut expected = keys(&serde_json::to_value(&history.games[0]).unwrap());
-    expected.extend(["bayesian".into(), "elo".into()]);
-    assert_eq!(keys(game), expected);
-    assert_eq!(game["start_time_utc"], "2005-09-07T17:00:00Z");
+    assert_eq!(keys(game), ["id", "bayesian", "elo"].map(String::from).into());
+    assert_eq!(game["id"], predicted.games[0].game.id);
     for predictor in ["bayesian", "elo"] {
         assert_eq!(
             keys(&game[predictor]),
@@ -119,6 +122,6 @@ fn predicted_games_serialize_the_history_fields_beside_flat_forecasts_and_read_b
             "{predictor}"
         );
     }
-    let read: SeasonPredictions = serde_json::from_value(json.clone()).unwrap();
+    let read: SeasonPredictions<SavedGame> = serde_json::from_value(json.clone()).unwrap();
     assert_eq!(serde_json::to_value(&read).unwrap(), json);
 }

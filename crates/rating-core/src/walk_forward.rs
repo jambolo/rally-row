@@ -27,7 +27,7 @@ pub fn preseasons(history: &GameFile, cfg: &LeagueConfig, seasons: RangeInclusiv
     ensure!(
         history.schema_version == HISTORY_SCHEMA_VERSION
             && history.league == cfg.id
-            && history.teams == cfg.teams
+            && history.teams_sha256 == cfg.teams_sha256()
             && history.from_season == cfg.history_start,
         "History schema, league, franchise identities, or first season do not match configuration; rerun import-history"
     );
@@ -70,7 +70,7 @@ pub fn posteriors_by_utc_date<'a>(
 }
 
 /// One predictor's pregame forecast for a game.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Prediction {
     #[serde(flatten)]
     pub probabilities: Probabilities,
@@ -94,9 +94,8 @@ impl Prediction {
 }
 
 /// A completed game with both in-season predictors' pregame forecasts.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PredictedGame {
-    #[serde(flatten)]
     pub game: Game,
     /// Laplace posterior fit to the season's earlier UTC dates.
     pub bayesian: Prediction,
@@ -104,14 +103,32 @@ pub struct PredictedGame {
     pub elo: Prediction,
 }
 
-/// Every game of one season, predicted before it was played.
+/// A predicted game as `simulated-seasons.json` saves it: the `history.json` game's id and both forecasts.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SeasonPredictions {
+pub struct SavedGame {
+    pub id: String,
+    pub bayesian: Prediction,
+    pub elo: Prediction,
+}
+
+impl From<&PredictedGame> for SavedGame {
+    fn from(p: &PredictedGame) -> Self {
+        Self {
+            id: p.game.id.clone(),
+            bayesian: p.bayesian,
+            elo: p.elo,
+        }
+    }
+}
+
+/// Every game of one season, predicted before it was played.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SeasonPredictions<G = PredictedGame> {
     pub season: i32,
     /// Davidson tie weight estimated from the earlier seasons; both predictors apply it where ties are allowed.
     pub tie_weight: f64,
     /// The season's games in start order.
-    pub games: Vec<PredictedGame>,
+    pub games: Vec<G>,
 }
 
 impl Preseason {

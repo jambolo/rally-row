@@ -43,7 +43,7 @@ fn cli_saves_every_heldout_game_predicted_from_earlier_dates_and_leaves_inputs_u
     let generated_at = DateTime::parse_from_rfc3339(saved["generated_at"].as_str().unwrap()).unwrap();
     assert_eq!(generated_at.offset().local_minus_utc(), 0);
     assert!(generated_at >= started && generated_at <= Utc::now());
-    assert_eq!(saved["schema_version"], 1);
+    assert_eq!(saved["schema_version"], 2);
     assert_eq!(saved["league"], "nfl");
     assert_eq!(saved["config_sha256"], digest(&config_bytes));
     assert_eq!(saved["history_sha256"], digest(&history_bytes));
@@ -51,14 +51,13 @@ fn cli_saves_every_heldout_game_predicted_from_earlier_dates_and_leaves_inputs_u
         saved["split"],
         json!({"warmup_start": 2002, "tune_start": 2003, "tune_end": 2004, "test_end": 2006})
     );
-    assert_eq!(saved["elo_settings"], serde_json::to_value(&cfg.elo).unwrap());
-    assert_eq!(saved["bayesian_settings"], serde_json::to_value(&cfg.bayesian).unwrap());
+    let game_keys: Vec<_> = saved["seasons"][0]["games"][0].as_object().unwrap().keys().cloned().collect();
+    assert_eq!(game_keys, ["bayesian", "elo", "id"]);
 
-    let file: SimulatedSeasons = serde_json::from_value(saved.clone()).unwrap();
+    let file = SimulatedSeasons::load(&tool.path().join("data"), &cfg, &config_bytes).unwrap();
     assert_eq!(file.seasons.iter().map(|s| s.season).collect::<Vec<_>>(), [2005, 2006]);
-    for (i, season) in file.seasons.iter().enumerate() {
-        let expected = predict_season(&history, &cfg, season.season).unwrap();
-        assert_eq!(saved["seasons"][i], serde_json::to_value(&expected).unwrap());
+    for season in &file.seasons {
+        assert_eq!(season, &predict_season(&history, &cfg, season.season).unwrap());
         let games: Vec<_> = season.games.iter().map(|p| &p.game).collect();
         let expected: Vec<_> = history.games.iter().filter(|g| g.season == season.season).collect();
         assert_eq!(games, expected);
@@ -77,11 +76,12 @@ fn cli_a_games_result_never_changes_its_own_prediction() {
     tool.write_config(&cfg);
     tool.write_history(&history);
     let (_, _, before) = simulate(&tool, &[]);
-    history.games.last_mut().unwrap().result = Some(Outcome::HomeWin);
+    let last = history.games.last_mut().unwrap();
+    assert_ne!(last.result, Some(Outcome::HomeWin));
+    last.result = Some(Outcome::HomeWin);
     tool.write_history(&history);
-    let (_, _, mut after) = simulate(&tool, &[]);
-    assert_eq!(after["seasons"][1]["games"][4]["result"], "home_win");
-    after["seasons"][1]["games"][4]["result"] = before["seasons"][1]["games"][4]["result"].clone();
+    let (_, _, after) = simulate(&tool, &[]);
+    assert_ne!(before["history_sha256"], after["history_sha256"]);
     assert_eq!(before["seasons"], after["seasons"]);
 }
 

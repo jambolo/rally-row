@@ -250,14 +250,13 @@ export const gameFileSchema = z.object({
 });
 export type GameFile = z.infer<typeof gameFileSchema>;
 export const seedSchema = z.object({
-  schema_version: z.literal(1),
+  schema_version: z.literal(2),
   league: z.string(),
   target_season: z.number().int(),
   through_season: z.number().int(),
   generated_at: z.iso.datetime({ offset: true }),
   history_sha256: z.string().length(64),
   config_sha256: z.string().length(64),
-  settings: eloSchema,
   completed_games: z.number().int().nonnegative(),
   tied_games: z.number().int().nonnegative(),
   tie_weight: finite.positive(),

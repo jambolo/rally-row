@@ -1,4 +1,4 @@
-use rating_core::{EloTuneSettings, GameFile, LeagueConfig, Outcome, SimulatedSeasons, tuning::Split, write_json};
+use rating_core::{EloTuneSettings, GameFile, LeagueConfig, Outcome, SimulatedSeasons, tuning::Split};
 use serde_json::{Value, json};
 use std::fs;
 use test_support::{
@@ -28,7 +28,7 @@ fn simulate(tool: &ToolDir, cfg: &LeagueConfig, history: &GameFile, split: Split
     let config_bytes = tool.write_config(cfg);
     let history_bytes = tool.write_history(history);
     let simulated = SimulatedSeasons::simulate(history, &history_bytes, cfg, &config_bytes, split, |_| {}).unwrap();
-    write_json(&tool.path().join(SIMULATED), &simulated).unwrap();
+    simulated.save(&tool.path().join(SIMULATED)).unwrap();
 }
 
 fn overlap_noted(report: &Value) -> bool {
@@ -182,7 +182,7 @@ fn cli_rejects_a_missing_incompatible_or_stale_simulation() {
     simulate(&tool, &cfg, &history, split(2004, 2006));
     let path = tool.path().join(SIMULATED);
     let saved: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    for (field, value) in [("schema_version", json!(2)), ("league", json!("mlb"))] {
+    for (field, value) in [("schema_version", json!(1)), ("league", json!("mlb"))] {
         let mut changed = saved.clone();
         changed[field] = value;
         fs::write(&path, serde_json::to_vec(&changed).unwrap()).unwrap();

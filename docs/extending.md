@@ -222,13 +222,13 @@ The [importer](history-import.md) writes `data/<league>/history.json` with these
 
 | Field | Contents |
 | --- | --- |
-| `schema_version` | `3` |
+| `schema_version` | `4` |
 | `league` | League ID matching the configuration |
-| `fetched_at` | RFC 3339 timestamp of the import |
+| `fetched_at` | RFC 3339 timestamp of the import that last wrote the file |
 | `source_url` | Configured provider URL |
 | `from_season` | First included season |
 | `through_season` | Last included season, inclusive |
-| `teams` | Franchise identity registry described in [Configuration](#configuration) |
+| `teams_sha256` | SHA-256 of the configuration's `teams`, the franchise identity registry described in [Configuration](#configuration), serialized as compact JSON |
 | `games` | Array of normalized historical game records |
 
 Each game has the following structure:
@@ -303,7 +303,8 @@ To publish it, add the same two invocations to the `Generate league data` step o
           cargo run --release -p generate-preseason-seed -- --league <id>
 ```
 
-The workflow's monthly scheduled build then publishes the league's new-season seed after its `season_rollover_month`.
+The workflow's scheduled build then publishes the league's new-season seed in its `season_rollover_month`. It reads
+each league's rollover month from `config/`, so the schedule needs no change.
 
 ## Tests and parity fixtures
 

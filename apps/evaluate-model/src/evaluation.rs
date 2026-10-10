@@ -418,8 +418,8 @@ pub fn run(cfg: &LeagueConfig, simulated: SimulatedSeasons) -> Result<Report> {
         method: "Configured settings; preseason priors and tie weight from earlier seasons only; Bayesian Laplace posterior refit per UTC date versus Elo ratings updated after each game; both predict each UTC date from earlier dates only",
         split,
         holdout_seasons: [first, last],
-        elo_settings: simulated.elo_settings,
-        bayesian_settings: simulated.bayesian_settings,
+        elo_settings: cfg.elo.clone(),
+        bayesian_settings: cfg.bayesian.clone(),
         tie_weights,
         predictors: Predictors {
             equal_strength: evaluate(&rows, Method::EqualStrength)?,

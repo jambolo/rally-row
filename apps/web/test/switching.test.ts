@@ -30,14 +30,13 @@ const mlbConfigBytes = readFileSync(new URL('../../../config/mlb.json', import.m
 const mlbConfig = configSchema.parse(JSON.parse(mlbConfigBytes.toString()));
 const mlbHistoryHash = await digest('mlb history');
 const mlbSeed: EloSeed = {
-  schema_version: 1,
+  schema_version: 2,
   league: 'mlb',
   target_season: 2026,
   through_season: 2025,
   generated_at: '2026-01-15T00:00:00Z',
   history_sha256: mlbHistoryHash,
   config_sha256: await digest(mlbConfigBytes),
-  settings: mlbConfig.elo,
   completed_games: 2400,
   tied_games: 0,
   tie_weight: 0.0003,

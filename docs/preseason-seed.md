@@ -61,14 +61,13 @@ it in the browser.
 
 | Field | Contents |
 | --- | --- |
-| `schema_version` | `1` |
+| `schema_version` | `2` |
 | `league` | League id matching the configuration |
 | `target_season` | Season the seed is for |
 | `through_season` | Last replayed season, `target_season - 1` |
 | `generated_at` | RFC 3339 UTC timestamp of the run |
 | `history_sha256` | SHA-256 of the `history.json` bytes the run read |
-| `config_sha256` | SHA-256 of the configuration bytes the run read |
-| `settings` | The configuration's `elo` block |
+| `config_sha256` | SHA-256 of the configuration bytes the run read; it pins the Elo settings the run used |
 | `completed_games` | Completed historical games replayed |
 | `tied_games` | Ties among them |
 | `tie_weight` | Tie weight ν |
@@ -86,5 +85,5 @@ The browser loads the current season's seed for the selected league. It rejects 
 
 The hash covers the whole configuration file, so rerun
 `generate-preseason-seed` after any configuration change, not only a change to `elo` or `bayesian`, and after every
-import. The Pages workflow regenerates every league's history and seed before each build, and its monthly run
-publishes each league's new-season seed after its rollover month.
+import. The Pages workflow regenerates every league's history and seed before each build, and its scheduled run
+publishes each league's new-season seed in its rollover month.

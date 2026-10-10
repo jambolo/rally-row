@@ -49,7 +49,7 @@ pub fn validate(history: &GameFile, cfg: &LeagueConfig, split: Split) -> Result<
         "Require warm-up history, at least two tuning seasons, and later completed held-out seasons"
     );
     ensure!(
-        history.schema_version == HISTORY_SCHEMA_VERSION && history.league == cfg.id && history.teams == cfg.teams,
+        history.schema_version == HISTORY_SCHEMA_VERSION && history.league == cfg.id && history.teams_sha256 == cfg.teams_sha256(),
         "History schema, league, or franchise identities do not match configuration; rerun import-history"
     );
     ensure!(

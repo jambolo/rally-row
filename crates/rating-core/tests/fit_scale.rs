@@ -55,14 +55,13 @@ fn synthetic_season(value: u32, cfg: &LeagueConfig) -> (EloSeed, Vec<Game>) {
         });
     }
     let seed = EloSeed {
-        schema_version: 1,
+        schema_version: 2,
         league: cfg.id.clone(),
         target_season: 2026,
         through_season: 2025,
         generated_at: "2026-09-01T00:00:00Z".into(),
         history_sha256: String::new(),
         config_sha256: String::new(),
-        settings: cfg.elo.clone(),
         completed_games: 0,
         tied_games: 0,
         tie_weight: 0.0003,
