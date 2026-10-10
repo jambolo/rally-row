@@ -7,14 +7,14 @@ Use Node LTS, stable Rust with `rustfmt` and `clippy`, and the pnpm version pinn
 `build-essential`, `pkg-config`, and `ca-certificates`.
 
 Run commands from the repository root. The importer downloads each league's history, so these commands need
-network access; Elo then writes each league's current-season seed:
+network access; `generate-preseason-seed` then writes each league's current-season seed:
 
 ```powershell
 pnpm -C apps/web install --frozen-lockfile
-cargo run --release -p history-importer -- --league nfl
-cargo run --release -p elo-ratings -- --league nfl
-cargo run --release -p history-importer -- --league mlb
-cargo run --release -p elo-ratings -- --league mlb
+cargo run --release -p import-history -- --league nfl
+cargo run --release -p generate-preseason-seed -- --league nfl
+cargo run --release -p import-history -- --league mlb
+cargo run --release -p generate-preseason-seed -- --league mlb
 pnpm -C apps/web dev
 ```
 
@@ -32,8 +32,8 @@ Dependency install-script permissions and release-age exceptions are in
 
 | Directory | Purpose |
 | --- | --- |
-| `apps/history-importer/` | Rust history importer: downloads a league's provider data (or reads saved files) and writes `data/<id>/history.json` |
-| `apps/elo-ratings/` | Rust Elo executable: writes a league's preseason seed `data/<id>/elo-<season>.json` |
+| `apps/import-history/` | Rust history importer: downloads a league's provider data (or reads saved files) and writes `data/<id>/history.json` |
+| `apps/generate-preseason-seed/` | Rust seed generator: replays a league's history with Elo and writes its preseason seed `data/<id>/elo-<season>.json` |
 | `apps/elo-tune/` | Offline Elo parameter search and held-out evaluation |
 | `apps/bayes-tune/` | Offline Bayesian parameter search with fixed Elo and held-out evaluation |
 | `apps/evaluate-model/` | Offline scoring of Bayesian and in-season Elo predictions on held-out seasons, made with the configured settings |
@@ -45,7 +45,21 @@ Dependency install-script permissions and release-age exceptions are in
 | `crates/rating-core/tests/fixtures/` | Rust/TypeScript parity fixtures: `bayesian-parity.json` (Bayesian fit) and `mlb-statsapi.json` (MLB adapter) |
 | `crates/test-support/` | Rust test helpers shared by every crate's tests: league configs, history fixtures, and command-line checks the tools have in common |
 | `config/` | League configurations: `nfl.json`, `mlb.json` |
-| `docs/` | Statistical model, extension guide, franchise history, branding |
+| `docs/` | Statistical model, command-line tools, extension guide, franchise history, branding |
+
+## Command-line tools
+
+Each tool has its own page covering its options, checks, output, and errors:
+
+| Tool | Command | Documentation |
+| --- | --- | --- |
+| `import-history` | `cargo run --release -p import-history -- --league <id>` | [History import](docs/history-import.md) |
+| `generate-preseason-seed` | `cargo run --release -p generate-preseason-seed -- --league <id>` | [Preseason seed](docs/preseason-seed.md) |
+| `elo-tune` | `cargo run --release -p elo-tune -- --league <id>` | [Elo tuning](docs/elo-tuning.md) |
+| `bayes-tune` | `cargo run --release -p bayes-tune -- --league <id>` | [Bayesian tuning](docs/bayesian-tuning.md) |
+| `evaluate-model` | `cargo run --release -p evaluate-model -- --league <id>` | [Model evaluation](docs/model-evaluation.md) |
+| `simulate-season` | `cargo run --release -p simulate-season -- --league <id>` | [Season simulation](docs/season-simulation.md) |
+| Node backtest | `pnpm -C apps/web backtest -- --league <id>` | [Backtesting](docs/backtesting.md) |
 
 ## Data and configuration
 
@@ -61,14 +75,14 @@ Each league has one configuration file in `config/`, named after its league id:
 A league's current season is the UTC year, minus one before its rollover month: NFL games from January
 through March belong to the previous season, and MLB seasons are calendar years. Season defaults use the
 current UTC date. Generated files are ignored by Git: `data/<id>/history.json` from the importer,
-`data/<id>/elo-<target-season>.json` from Elo, and `data/<id>/simulated-seasons.json` from
+`data/<id>/elo-<target-season>.json` and `data/<id>/elo-audit-<target-season>.json` from Elo, and `data/<id>/simulated-seasons.json` from
 `simulate-season`.
 
 ```powershell
-cargo run --release -p history-importer -- --league nfl --through-season 2025
-cargo run --release -p elo-ratings -- --league nfl --target-season 2026
-cargo run --release -p history-importer -- --league mlb --through-season 2025
-cargo run --release -p elo-ratings -- --league mlb --target-season 2026
+cargo run --release -p import-history -- --league nfl --through-season 2025
+cargo run --release -p generate-preseason-seed -- --league nfl --target-season 2026
+cargo run --release -p import-history -- --league mlb --through-season 2025
+cargo run --release -p generate-preseason-seed -- --league mlb --target-season 2026
 ```
 
 All command-line programs and the backtest take these options:
@@ -78,26 +92,29 @@ All command-line programs and the backtest take these options:
 | `--league <id>` | All | Required. Reads `<config-dir>/<id>.json`, whose `id` must equal `<id>`. Ids use letters, digits, and hyphens. |
 | `--config-dir <dir>` | All | Configuration directory; default `config`. |
 | `--data-dir <dir>` | All | Data directory; default `data`. Files are read and written under `<dir>/<id>/`. |
-| `--through-season <year>` | `history-importer` | Last imported season; default the current season minus one. It must be at least `history_start` and before the current season. |
-| `--input <file>...` | `history-importer` | Reads saved provider files instead of downloading: one nflverse games CSV (NFL), one Stats API schedule JSON per season from `history_start` through `--through-season` (MLB), or one canonical JSON envelope. |
-| `--target-season <year>` | `elo-ratings` | Seed season; default the current season. |
+| `--through-season <year>` | `import-history` | Last imported season; default the current season minus one. It must be at least `history_start` and before the current season. |
+| `--input <file>...` | `import-history` | Reads saved provider files instead of downloading: one nflverse games CSV (NFL), one Stats API schedule JSON per season from `history_start` through `--through-season` (MLB), or one canonical JSON envelope. |
+| `--target-season <year>` | `generate-preseason-seed` | Seed season; default the current season. |
 
 The tuners, the model evaluation, the season simulation, and the backtest take further options; see
 [Tuning](#tuning), [Model evaluation](#model-evaluation), [Season simulation](#season-simulation), and
-[Backtesting](#backtesting).
+[Backtesting](#backtesting). [History import](docs/history-import.md) and
+[Preseason seed](docs/preseason-seed.md) describe `import-history` and `generate-preseason-seed` in full, including
+the seed's format.
 
 The importer replaces `data/<id>/history.json` only when every imported season has completed games and the
 league's completion marker (a completed Super Bowl for NFL, a completed World Series game for MLB); on
-failure the previous file stays. `elo-ratings` embeds SHA-256 hashes of the configuration and history in
+failure the previous file stays. `generate-preseason-seed` embeds SHA-256 hashes of the configuration and history in
 its seed, and the browser and backtest reject a seed whose hashes do not match.
 
-- New season: rerun the importer and Elo for the league, then rebuild the site. Import only historical seasons.
-- Model configuration or history changes: rerun Elo to update the linked hashes.
-- Franchise identity, alias, or division changes: rerun the importer, then Elo.
+- New season: rerun `import-history` and `generate-preseason-seed` for the league, then rebuild the site. Import
+  only historical seasons.
+- Model configuration or history changes: rerun `generate-preseason-seed` to update the linked hashes.
+- Franchise identity, alias, or division changes: rerun `import-history`, then `generate-preseason-seed`.
 
-Rebuild the site to publish updated data and configuration. The Vite build copies every JSON file under
-`config/` and `data/` into the site as `config/<id>.json`, `data/<id>/history.json`, and
-`data/<id>/elo-<season>.json`. To add a league, see [Add a league](docs/extending.md).
+Rebuild the site to publish updated data and configuration. The Vite build publishes only what the app reads:
+`config/<id>.json`, `data/<id>/elo-<season>.json`, and `data/<id>/history.sha256`, the SHA-256 of `history.json`,
+which the app checks against the seed's `history_sha256`. To add a league, see [Add a league](docs/extending.md).
 
 ## Checks
 
@@ -135,11 +152,12 @@ Workflows in [`.github/workflows/`](.github/workflows/):
   Codecov uploads run on `develop` with `rust` and `web` flags.
 - `cd.yml`: runs when either version manifest changes on `master`. After builds and tests, creates
   missing project and web tags, then merges `master` into `develop` if it created a tag.
-- `pages.yml`: regenerates history and Elo for every league (`--league nfl`, then `--league mlb`), builds
+- `pages.yml`: regenerates history and preseason seeds for every league (`--league nfl`, then `--league mlb`), builds
   the site with `data/` and `config/`, and deploys `apps/web/dist`. Runs on `master` pushes, manual
   dispatch, and the first Tuesday of each month at 09:17 UTC; the monthly run publishes each league's
-  new-season seed after its configured rollover month. A new league needs its own importer and Elo lines
-  in the workflow. Deployment runs separately from CD and does not wait for a release to succeed.
+  new-season seed after its configured rollover month. A new league needs its own `import-history` and
+  `generate-preseason-seed` lines in the workflow. Deployment runs separately from CD and does not wait for a release
+  to succeed.
 
 ### Versions and releases
 
@@ -168,9 +186,10 @@ project release must exceed `1.0.0` rather than reuse the historical `cli-v1.0.0
 
 Both tuners run offline against `data/<id>/history.json` without modifying inputs, so import the league's
 history first. `elo-tune` searches Elo parameters; `bayes-tune` searches Bayesian parameters with Elo
-fixed. Methods and report contents:
+fixed. Methods:
 [Elo tuning](docs/model.md#elo-only-tuning) and
-[Bayesian tuning](docs/model.md#bayesian-parameter-tuning).
+[Bayesian tuning](docs/model.md#bayesian-parameter-tuning). Options, report fields, and adopting the results:
+[Elo tuning](docs/elo-tuning.md) and [Bayesian tuning](docs/bayesian-tuning.md).
 
 ```powershell
 cargo run --release -p elo-tune -- --league nfl
@@ -255,7 +274,8 @@ summary. Progress messages go to stderr either way. `--report-dir` also writes t
 (`--tune-start`, `--tune-end`, `--test-end`) match `bayes-tune`: `bayes_tune`, falling back to `elo_tune`, so
 both shipped leagues evaluate 2023–2025. The tool validates the split as the tuners do, and its notes flag any
 held-out season that falls within a configured tuning range. The MLB run takes a few seconds in a release
-build. The tool scores whatever the configuration holds, so apply tuned parameters before running it.
+build. The tool scores whatever the configuration holds, so apply tuned parameters before running it. Options, the
+summary, and the report fields: [Model evaluation](docs/model-evaluation.md).
 
 ## Season simulation
 
@@ -287,23 +307,30 @@ season. Each UTC date is predicted from earlier UTC dates only.
 
 ```powershell
 # Evaluate 2025 with priors trained through 2024
-cargo run --release -p history-importer -- --league nfl --through-season 2024 --data-dir data-backtest
-cargo run --release -p elo-ratings -- --league nfl --target-season 2025 --data-dir data-backtest
+cargo run --release -p import-history -- --league nfl --through-season 2024 --data-dir data-backtest
+cargo run --release -p generate-preseason-seed -- --league nfl --target-season 2025 --data-dir data-backtest
 pnpm -C apps/web backtest -- --league nfl --season 2025 --data-dir data-backtest
-cargo run --release -p history-importer -- --league mlb --through-season 2024 --data-dir data-backtest
-cargo run --release -p elo-ratings -- --league mlb --target-season 2025 --data-dir data-backtest
+cargo run --release -p import-history -- --league mlb --through-season 2024 --data-dir data-backtest
+cargo run --release -p generate-preseason-seed -- --league mlb --target-season 2025 --data-dir data-backtest
 pnpm -C apps/web backtest -- --league mlb --season 2025 --data-dir data-backtest
 ```
 
 For MLB, a late game whose UTC start falls on the day after its official date is predicted in the next UTC
 date's batch, so earlier games of the same official date can inform it; see
-[Pregame reconstruction and backtesting](docs/model.md#pregame-reconstruction-and-backtesting).
+[Pregame reconstruction and backtesting](docs/model.md#pregame-reconstruction-and-backtesting). Options, checks, and
+output: [Backtesting](docs/backtesting.md).
 
 ## References
 
 - [Browser usage](README.md)
 - [Statistical model and backtesting methodology](docs/model.md)
 - [Adding leagues, source adapters, and data formats](docs/extending.md)
+- [History import](docs/history-import.md)
+- [Preseason seed and its file format](docs/preseason-seed.md)
+- [Elo tuning and its report](docs/elo-tuning.md)
+- [Bayesian tuning and its report](docs/bayesian-tuning.md)
+- [Model evaluation and its report](docs/model-evaluation.md)
 - [Season simulation and its file format](docs/season-simulation.md)
+- [Backtesting](docs/backtesting.md)
 - [Franchise identities and aliases](docs/team-history.md)
 - [Branding and messaging](docs/branding.md)

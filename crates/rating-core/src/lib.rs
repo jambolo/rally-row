@@ -290,7 +290,22 @@ pub struct EloSeed {
     pub tied_games: usize,
     pub tie_weight: f64,
     pub ratings: Vec<Rating>,
-    pub audit: Vec<Audit>,
+}
+pub const ELO_AUDIT_SCHEMA_VERSION: u32 = 1;
+
+/// `data/<league>/elo-audit-<season>.json`: the replay behind `elo-<season>.json`, kept apart because the browser
+/// doesn't read it.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EloAudit {
+    pub schema_version: u32,
+    pub league: String,
+    pub target_season: i32,
+    pub through_season: i32,
+    pub generated_at: String,
+    pub history_sha256: String,
+    pub config_sha256: String,
+    /// One entry per replayed game, in replay order.
+    pub games: Vec<Audit>,
 }
 pub const SIMULATED_SEASONS_SCHEMA_VERSION: u32 = 1;
 
@@ -345,9 +360,9 @@ pub fn load_league_config(config_dir: &Path, league: &str) -> Result<(LeagueConf
 
 /// Load `<data_dir>/<league>/history.json`, returning the parsed file and its bytes.
 pub fn load_history(data_dir: &Path, cfg: &LeagueConfig) -> Result<(GameFile, Vec<u8>)> {
-    let bytes = fs::read(data_dir.join(&cfg.id).join("history.json")).context("Read history.json; run history-importer first")?;
+    let bytes = fs::read(data_dir.join(&cfg.id).join("history.json")).context("Read history.json; run import-history first")?;
     let history = serde_json::from_slice(&bytes)
-        .context("Parse history.json; start_time_utc, numeric round, and round_label are required; rerun history-importer")?;
+        .context("Parse history.json; start_time_utc, numeric round, and round_label are required; rerun import-history")?;
     Ok((history, bytes))
 }
 
@@ -832,8 +847,8 @@ pub fn build_seed(
     cfg: &LeagueConfig,
     config_bytes: &[u8],
     target: i32,
-) -> Result<EloSeed> {
-    seed_with_ties(history, history_bytes, cfg, config_bytes, target).map(|(seed, _)| seed)
+) -> Result<(EloSeed, EloAudit)> {
+    seed_with_ties(history, history_bytes, cfg, config_bytes, target).map(|(seed, audit, _)| (seed, audit))
 }
 
 /// `build_seed`, also returning the tie history that set the seed's tie weight.
@@ -843,19 +858,19 @@ pub(crate) fn seed_with_ties(
     cfg: &LeagueConfig,
     config_bytes: &[u8],
     target: i32,
-) -> Result<(EloSeed, bayesian::TieHistory)> {
+) -> Result<(EloSeed, EloAudit, bayesian::TieHistory)> {
     cfg.validate()?;
     ensure!(
         history.teams == cfg.teams,
-        "Team identity history changed; rerun history-importer before elo-ratings"
+        "Team identity history changed; rerun import-history before generate-preseason-seed"
     );
     ensure!(
         history.schema_version == HISTORY_SCHEMA_VERSION && history.league == cfg.id,
-        "Incompatible history file; rerun history-importer"
+        "Incompatible history file; rerun import-history"
     );
     ensure!(
         history.from_season == cfg.history_start && history.through_season == target - 1,
-        "History must cover {} through {}. Run history-importer first.",
+        "History must cover {} through {}. Run import-history first.",
         cfg.history_start,
         target - 1
     );
@@ -885,9 +900,18 @@ pub(crate) fn seed_with_ties(
         tied_games: ties.tied_games,
         tie_weight: ties.estimate(&cfg.bayesian),
         ratings,
-        audit,
     };
-    Ok((seed, ties))
+    let audit = EloAudit {
+        schema_version: ELO_AUDIT_SCHEMA_VERSION,
+        league: seed.league.clone(),
+        target_season: seed.target_season,
+        through_season: seed.through_season,
+        generated_at: seed.generated_at.clone(),
+        history_sha256: seed.history_sha256.clone(),
+        config_sha256: seed.config_sha256.clone(),
+        games: audit,
+    };
+    Ok((seed, audit, ties))
 }
 
 #[cfg(test)]

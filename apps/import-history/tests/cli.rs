@@ -6,7 +6,7 @@ use test_support::{
     league_config_json,
 };
 
-const BIN: &str = env!("CARGO_BIN_EXE_history-importer");
+const BIN: &str = env!("CARGO_BIN_EXE_import-history");
 
 /// An import of `league` through `through_season`, reading the config from and writing history under `dir`; callers
 /// add `--input` files.

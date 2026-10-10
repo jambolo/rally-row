@@ -41,16 +41,31 @@ fn seeds_are_chronological_tie_aware_and_regressed_exactly_once() {
     games[0].result = Some(Outcome::HomeWin);
     let history = history_file(&cfg, 2002..=2002, games.clone());
     let bytes = serde_json::to_vec(&history).unwrap();
-    let seed = build_seed(&history, &bytes, &cfg, b"config", 2003).unwrap();
+    let (seed, audit) = build_seed(&history, &bytes, &cfg, b"config", 2003).unwrap();
     let lv = seed.ratings.iter().find(|t| t.team == "LV").unwrap();
     assert!((lv.elo - (cfg.elo.initial + 10.0 * 2.0 / 3.0)).abs() < 1e-9);
     assert_eq!(seed.completed_games, 1); // Scheduled game is not an observation.
-    assert_eq!(seed.audit[0].home_before, cfg.elo.initial);
-    assert_eq!(seed.audit[0].home_after, cfg.elo.initial + 10.0);
+    assert_eq!(audit.games.len(), seed.completed_games);
+    assert_eq!(audit.games[0].home_before, cfg.elo.initial);
+    assert_eq!(audit.games[0].home_after, cfg.elo.initial + 10.0);
+    assert_eq!(
+        (
+            audit.target_season,
+            &audit.generated_at,
+            &audit.history_sha256,
+            &audit.config_sha256
+        ),
+        (
+            seed.target_season,
+            &seed.generated_at,
+            &seed.history_sha256,
+            &seed.config_sha256
+        )
+    );
     assert!(seed.tie_weight > 0.0);
     let mut reversed = history.clone();
     reversed.games.reverse();
-    let again = build_seed(&reversed, &bytes, &cfg, b"config", 2003).unwrap();
+    let (again, _) = build_seed(&reversed, &bytes, &cfg, b"config", 2003).unwrap();
     assert_eq!(seed.ratings[0].elo, again.ratings[0].elo);
     assert!(build_seed(&history, &bytes, &cfg, b"config", 2004).is_err());
     let mut obsolete = history.clone();
@@ -60,7 +75,7 @@ fn seeds_are_chronological_tie_aware_and_regressed_exactly_once() {
             build_seed(&obsolete, &bytes, &cfg, b"config", 2003)
                 .unwrap_err()
                 .to_string()
-                .contains("rerun history-importer")
+                .contains("rerun import-history")
         );
     }
     let mut leaked = history;
@@ -128,11 +143,11 @@ fn relocation_preserves_one_rating_history_and_original_source_ids() {
     assert_eq!(games[0].home_source_id, "OAK");
     assert_eq!(games[1].home_source_id, "LV");
     let history = history_file(&cfg, 2019..=2020, games);
-    let output = build_seed(&history, b"history", &cfg, b"config", 2021).unwrap();
+    let (output, audit) = build_seed(&history, b"history", &cfg, b"config", 2021).unwrap();
     let team = output.ratings.iter().find(|t| t.team == "LV").unwrap();
     assert_eq!(team.games, 2);
     assert!(team.elo > cfg.elo.initial);
-    assert!(output.audit[1].home_before > cfg.elo.initial); // Rename did not reset the rating.
+    assert!(audit.games[1].home_before > cfg.elo.initial); // Rename did not reset the rating.
     assert!(parse_source(&input.replace("OAK", "LV"), &cfg).is_err());
 }
 

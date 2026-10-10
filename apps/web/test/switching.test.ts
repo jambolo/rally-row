@@ -10,7 +10,12 @@ import { rememberedLeagueKey } from '../src/small-store.ts';
 import { readSnapshot, snapshotKey } from '../src/snapshot.ts';
 import { currentCacheKey, digest, memoryStore } from '../src/storage.ts';
 import { fakeIndexedDb } from './fake-indexeddb.ts';
-import { config as nflConfig, configBytes as nflConfigBytes, historyBytes as nflHistoryBytes, seed as nflSeed } from './helpers.ts';
+import {
+  config as nflConfig,
+  configBytes as nflConfigBytes,
+  historyHashFile as nflHistoryHashFile,
+  seed as nflSeed,
+} from './helpers.ts';
 
 // refresh() always runs the production simulation count; these multi-refresh tests only need the odds to exist.
 const simulatePostseason = postseason.simulatePostseason;
@@ -23,14 +28,14 @@ const configBase = 'https://site.test/config';
 const dataBase = 'https://site.test/data';
 const mlbConfigBytes = readFileSync(new URL('../../../config/mlb.json', import.meta.url));
 const mlbConfig = configSchema.parse(JSON.parse(mlbConfigBytes.toString()));
-const mlbHistoryBytes = 'mlb history';
+const mlbHistoryHash = await digest('mlb history');
 const mlbSeed: EloSeed = {
   schema_version: 1,
   league: 'mlb',
   target_season: 2026,
   through_season: 2025,
   generated_at: '2026-01-15T00:00:00Z',
-  history_sha256: await digest(mlbHistoryBytes),
+  history_sha256: mlbHistoryHash,
   config_sha256: await digest(mlbConfigBytes),
   settings: mlbConfig.elo,
   completed_games: 2400,
@@ -77,11 +82,11 @@ beforeEach(() => {
   const files = new Map([
     [`${configBase}/nfl.json`, nflConfigBytes.toString()],
     [`${dataBase}/nfl/elo-2026.json`, JSON.stringify(nflSeed())],
-    [`${dataBase}/nfl/history.json`, nflHistoryBytes],
+    [`${dataBase}/nfl/history.sha256`, nflHistoryHashFile],
     [nflConfig.source.url, nflSchedule],
     [`${configBase}/mlb.json`, mlbConfigBytes.toString()],
     [`${dataBase}/mlb/elo-2026.json`, JSON.stringify(mlbSeed)],
-    [`${dataBase}/mlb/history.json`, mlbHistoryBytes],
+    [`${dataBase}/mlb/history.sha256`, mlbHistoryHash],
     [mlbConfig.source.url.replaceAll('{season}', '2026'), mlbSchedule],
   ]);
   vi.stubGlobal('fetch', async (url: string) => {

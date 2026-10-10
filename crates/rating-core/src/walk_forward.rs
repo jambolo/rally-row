@@ -12,7 +12,7 @@ use std::{cmp::Ordering, collections::BTreeMap};
 
 /// A season to predict, prepared from the seasons before it.
 pub struct Preseason {
-    /// Preseason Elo priors and tie weight from the earlier seasons, without the replay audit.
+    /// Preseason Elo priors and tie weight from the earlier seasons.
     pub seed: EloSeed,
     /// Tie history of the earlier seasons; it re-estimates the tie weight under other Bayesian settings.
     pub ties: TieHistory,
@@ -21,15 +21,14 @@ pub struct Preseason {
 }
 
 /// Builds `season`'s preseason seed from the earlier seasons in `history`, as `build_seed` does for
-/// `elo-ratings`, and collects the season's games in start order.
+/// `generate-preseason-seed`, and collects the season's games in start order.
 pub fn preseason(history: &GameFile, cfg: &LeagueConfig, season: i32) -> Result<Preseason> {
     let previous = GameFile {
         through_season: season - 1,
         games: history.games.iter().filter(|g| g.season < season).cloned().collect(),
         ..history.clone()
     };
-    let (mut seed, ties) = seed_with_ties(&previous, b"", cfg, b"", season)?;
-    seed.audit.clear();
+    let (seed, _, ties) = seed_with_ties(&previous, b"", cfg, b"", season)?;
     let mut games: Vec<_> = history.games.iter().filter(|g| g.season == season).cloned().collect();
     games.sort_by(chronological);
     Ok(Preseason { seed, ties, games })

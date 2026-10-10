@@ -6,7 +6,7 @@ import type { SessionView } from '../src/session.ts';
 import { readSnapshot, snapshotKey } from '../src/snapshot.ts';
 import { currentCacheKey, memoryStore } from '../src/storage.ts';
 import { fakeIndexedDb } from './fake-indexeddb.ts';
-import { config, configBytes, historyBytes, seed } from './helpers.ts';
+import { config, configBytes, historyHashFile, seed } from './helpers.ts';
 
 // refresh() always runs the production simulation count; these multi-refresh tests only need the odds to exist.
 const simulatePostseason = postseason.simulatePostseason;
@@ -25,7 +25,7 @@ beforeEach(() => {
   const files = new Map([
     ['https://test/config/nfl.json', configBytes.toString()],
     [`${dataBase}/nfl/elo-2026.json`, JSON.stringify(seed())],
-    [`${dataBase}/nfl/history.json`, historyBytes],
+    [`${dataBase}/nfl/history.sha256`, historyHashFile],
     [config.source.url, csv],
   ]);
   vi.stubGlobal('fetch', async (url: string) => {

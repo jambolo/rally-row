@@ -7,7 +7,7 @@ import type { SessionView } from '../src/session.ts';
 import { readSnapshot, snapshotKey } from '../src/snapshot.ts';
 import { digest, memoryStore } from '../src/storage.ts';
 import { fakeIndexedDb } from './fake-indexeddb.ts';
-import { config, configBytes, historyBytes, seed } from './helpers.ts';
+import { config, configBytes, historyHashFile, seed } from './helpers.ts';
 
 // refresh() always runs the production simulation count; these multi-refresh tests only need the odds to exist.
 const simulatePostseason = postseason.simulatePostseason;
@@ -37,7 +37,7 @@ async function setup() {
   const files = new Map([
     [configUrl, configBytes.toString()],
     [seedUrl, JSON.stringify(seed())],
-    [`${dataBase}/nfl/history.json`, historyBytes],
+    [`${dataBase}/nfl/history.sha256`, historyHashFile],
     [config.source.url, csv],
   ]);
   const fetcher = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async (url) => {
@@ -202,7 +202,7 @@ it.each(['Bayesian settings', 'source and metadata'])(
     expect(f.createWorker).toHaveBeenCalledTimes(2);
     expect(f.messages.filter((message) => message.type === 'progress')).toEqual([{ type: 'progress', phase: 'checking' }]);
     expect(f.fetcher).toHaveBeenCalledWith(f.seedUrl, expect.objectContaining({ cache: 'no-cache' }));
-    expect(f.fetcher).toHaveBeenCalledWith('https://test/data/nfl/history.json', expect.objectContaining({ cache: 'no-cache' }));
+    expect(f.fetcher).toHaveBeenCalledWith('https://test/data/nfl/history.sha256', expect.objectContaining({ cache: 'no-cache' }));
     expect((await f.saved())?.model).toEqual(next.model);
     expect(f.changes.at(-1)?.state).toMatchObject({ ...next.state, checked_at: new Date().toISOString() });
   },

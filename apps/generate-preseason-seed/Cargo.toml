@@ -1,16 +1,14 @@
 [package]
-name = "history-importer"
+name = "generate-preseason-seed"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-chrono.workspace = true
 clap.workspace = true
 rating-core.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
-tempfile.workspace = true
 test-support.workspace = true

@@ -2,8 +2,8 @@
 
 `simulate-season` simulates a league's held-out seasons with the configured settings and saves every game's
 pregame predictions to `data/<id>/simulated-seasons.json`. Evaluation tools can read this file instead of refitting
-the model. It holds the same Bayesian and Elo predictions that `evaluate-model` scores, so scoring the file as
-[Reading the scores](model.md#reading-the-scores) describes reproduces that tool's numbers.
+the model. It holds the same Bayesian and Elo predictions that [`evaluate-model`](model-evaluation.md) scores, so
+scoring the file as [Reading the scores](model.md#reading-the-scores) describes reproduces that tool's numbers.
 
 ## Running the tool
 
@@ -27,7 +27,7 @@ cargo run --release -p simulate-season -- --league nfl --tune-end 2022 --test-en
 | `--tune-end <year>` | Last tuning season; the held-out seasons follow it. Default `bayes_tune.tune_end`, then `elo_tune.tune_end`. |
 | `--test-end <year>` | Last held-out season; default `bayes_tune.test_end`, then `elo_tune.test_end`. |
 
-The split defaults and checks match [`evaluate-model`](../DEVELOPMENT.md#model-evaluation), so both shipped
+The split defaults and checks match [`evaluate-model`](model-evaluation.md), so both shipped
 leagues simulate 2023–2025. The history must cover every held-out season with completed games, and the last
 held-out season must precede the current season.
 
@@ -43,8 +43,9 @@ Rerun the tool after any change to the league's configuration or history. The fi
 
 Each held-out season is replayed as the app would have run it during that season:
 
-1. Preseason Elo ratings and the tie weight ν are rebuilt from the earlier seasons only, as `elo-ratings` builds a
-   seed. Earlier held-out seasons count as history, so 2025 starts from ratings that include 2023 and 2024.
+1. Preseason Elo ratings and the tie weight ν are rebuilt from the earlier seasons only, as
+   [`generate-preseason-seed`](preseason-seed.md) builds a seed. Earlier held-out seasons count as history, so 2025
+   starts from ratings that include 2023 and 2024.
 2. Games are taken one UTC date at a time, in start order. Both predictors forecast every game of a date from the
    preseason values and the results of earlier dates:
    - **Bayesian**: the app's model. A Laplace posterior is fit from the preseason prior to the season's earlier
