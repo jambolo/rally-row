@@ -4,7 +4,7 @@ use rating_core::{
     bayesian::Probabilities,
     scoring::{self, CalibrationBin, calibration, standard_error},
     tuning::{Ranges, SearchParameters, Split, add_candidates, boundary_note, grid_candidates, select, validate},
-    walk_forward::{Preseason, posteriors_by_utc_date, preseason},
+    walk_forward::{Preseason, posteriors_by_utc_date, preseasons},
 };
 use serde::Serialize;
 
@@ -103,14 +103,13 @@ struct PreparedSeason {
 }
 
 fn prepare(history: &GameFile, cfg: &LeagueConfig, start: i32, end: i32) -> Result<Vec<PreparedSeason>> {
-    (start..=end)
-        .map(|season| {
-            Ok(PreparedSeason {
-                preseason: preseason(history, cfg, season)?,
-                tie_weights: Vec::new(),
-            })
+    Ok(preseasons(history, cfg, start..=end)?
+        .into_iter()
+        .map(|preseason| PreparedSeason {
+            preseason,
+            tie_weights: Vec::new(),
         })
-        .collect()
+        .collect())
 }
 
 struct PredictionRow {
@@ -316,7 +315,9 @@ pub fn run(history: &GameFile, cfg: &LeagueConfig, split: Split, config_sha256: 
         "Searching Bayesian parameters using seasons {}–{} only...",
         split.tune_start, split.tune_end
     );
-    let mut prepared = prepare(history, cfg, split.tune_start, split.tune_end)?;
+    // One replay prepares the held-out seasons too; they are scored only after selection.
+    let mut prepared = prepare(history, cfg, split.tune_start, split.test_end)?;
+    let mut heldout = prepared.split_off((split.tune_end + 1 - split.tune_start) as usize);
     let (coarse_grid, grid_source) = Grid::starting(cfg.tuning_grids.as_ref().and_then(|g| g.bayesian.as_ref()));
     let mut candidates = Vec::new();
     let mut evaluated = 0_usize;
@@ -354,7 +355,6 @@ pub fn run(history: &GameFile, cfg: &LeagueConfig, split: Split, config_sha256: 
         split.tune_end + 1,
         split.test_end
     );
-    let mut heldout = prepare(history, cfg, split.tune_end + 1, split.test_end)?;
     let baseline_holdout = evaluate(&mut heldout, cfg, baseline)?;
     let selected_holdout = if selected.parameters == baseline {
         baseline_holdout.clone()

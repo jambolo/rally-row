@@ -57,8 +57,9 @@ binaries in `apps/` are thin CLIs over it, so logic two tools share belongs in t
 4. `simulate-season --league <id>` simulates the held-out seasons, which tuning never uses, one UTC date at a time
    with the configured settings and writes every game's pregame Bayesian and Elo predictions to
    `data/<id>/simulated-seasons.json` for evaluation tools. The file embeds config and history hashes; consumers
-   reject a file whose hashes don't match, as `SimulatedSeasons::load` does. The per-season prediction
-   (`walk_forward::predict_season`) and the file contract (`SimulatedSeasons`) live in `rating-core`.
+   reject a file whose hashes don't match, as `SimulatedSeasons::load` does. The preseason seeds, built in one
+   history replay (`walk_forward::preseasons`), the per-season prediction (`Preseason::predict`), and the file
+   contract (`SimulatedSeasons`) live in `rating-core`.
 5. `evaluate-model` scores the predictions in `simulated-seasons.json` without refitting the model. It compares
    Bayesian predictions with in-season Elo ratings.
 

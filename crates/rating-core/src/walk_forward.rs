@@ -2,13 +2,13 @@
 //! held-out season simulation do.
 
 use crate::{
-    EloSeed, Game, GameFile, LeagueConfig, apply_game,
+    EloSeed, Game, GameFile, HISTORY_SCHEMA_VERSION, LeagueConfig, apply_game,
     bayesian::{Posterior, Probabilities, TieHistory, fit_posterior, outcome_probabilities},
-    chronological, expected_home, seed_with_ties,
+    chronological, expected_home, replay_seeds,
 };
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::{cmp::Ordering, collections::BTreeMap};
+use std::{cmp::Ordering, collections::BTreeMap, ops::RangeInclusive};
 
 /// A season to predict, prepared from the seasons before it.
 pub struct Preseason {
@@ -20,18 +20,33 @@ pub struct Preseason {
     pub games: Vec<Game>,
 }
 
-/// Builds `season`'s preseason seed from the earlier seasons in `history`, as `build_seed` does for
-/// `generate-preseason-seed`, and collects the season's games in start order.
-pub fn preseason(history: &GameFile, cfg: &LeagueConfig, season: i32) -> Result<Preseason> {
-    let previous = GameFile {
-        through_season: season - 1,
-        games: history.games.iter().filter(|g| g.season < season).cloned().collect(),
-        ..history.clone()
-    };
-    let (seed, _, ties) = seed_with_ties(&previous, b"", cfg, b"", season)?;
-    let mut games: Vec<_> = history.games.iter().filter(|g| g.season == season).cloned().collect();
-    games.sort_by(chronological);
-    Ok(Preseason { seed, ties, games })
+/// Builds each season's preseason seed from the earlier seasons in `history`, as `build_seed` does for
+/// `generate-preseason-seed`, and collects the season's games in start order. One replay of the history serves every
+/// season.
+pub fn preseasons(history: &GameFile, cfg: &LeagueConfig, seasons: RangeInclusive<i32>) -> Result<Vec<Preseason>> {
+    ensure!(
+        history.schema_version == HISTORY_SCHEMA_VERSION
+            && history.league == cfg.id
+            && history.teams == cfg.teams
+            && history.from_season == cfg.history_start,
+        "History schema, league, franchise identities, or first season do not match configuration; rerun import-history"
+    );
+    let mut prepared = Vec::new();
+    replay_seeds(&history.games, b"", cfg, b"", seasons, |seed, ties| {
+        let mut games: Vec<_> = history
+            .games
+            .iter()
+            .filter(|g| g.season == seed.target_season)
+            .cloned()
+            .collect();
+        games.sort_by(chronological);
+        prepared.push(Preseason {
+            seed,
+            ties: ties.clone(),
+            games,
+        });
+    })?;
+    Ok(prepared)
 }
 
 /// Walks start-ordered `games` one UTC date at a time. Each item pairs a posterior fit to the earlier dates only
@@ -99,41 +114,48 @@ pub struct SeasonPredictions {
     pub games: Vec<PredictedGame>,
 }
 
-/// Simulates `season` as the app would have run it. Both predictors start from preseason Elo ratings and a tie weight
-/// built from the earlier seasons, and each UTC date is predicted from the season's earlier dates only. Every game of
-/// the season needs a result.
-pub fn predict_season(history: &GameFile, cfg: &LeagueConfig, season: i32) -> Result<SeasonPredictions> {
-    let Preseason { seed, games, .. } = preseason(history, cfg, season)?;
-    let mut ratings: BTreeMap<_, _> = seed.ratings.iter().map(|r| (r.team.clone(), r.elo)).collect();
-    let factor = std::f64::consts::LN_10 / cfg.elo.scale;
-    let mut predicted = Vec::with_capacity(games.len());
-    for fit in posteriors_by_utc_date(&seed, &games, cfg) {
-        let (model, date_games) = fit?;
-        for g in date_games {
-            let nu = if cfg.ties_allowed_in.contains(&g.phase) {
-                seed.tie_weight
-            } else {
-                0.0
-            };
-            let (home, away) = (ratings[&g.home_team], ratings[&g.away_team]);
-            let advantage = if g.neutral { 0.0 } else { cfg.elo.home_advantage };
-            predicted.push(PredictedGame {
-                game: g.clone(),
-                bayesian: Prediction::from_probabilities(model.predict(&g.home_team, &g.away_team, g.neutral, &g.phase)?),
-                elo: Prediction {
-                    probabilities: outcome_probabilities(factor * (home - away + advantage), nu),
-                    expected_home_score: expected_home(home, away, g.neutral, &cfg.elo),
-                },
-            });
+impl Preseason {
+    /// Simulates the season as the app would have run it. Both predictors start from the preseason Elo ratings and tie
+    /// weight, and each UTC date is predicted from the season's earlier dates only. Every game of the season needs a
+    /// result.
+    pub fn predict(&self, cfg: &LeagueConfig) -> Result<SeasonPredictions> {
+        let Self { seed, games, .. } = self;
+        let mut ratings: BTreeMap<_, _> = seed.ratings.iter().map(|r| (r.team.clone(), r.elo)).collect();
+        let factor = std::f64::consts::LN_10 / cfg.elo.scale;
+        let mut predicted = Vec::with_capacity(games.len());
+        for fit in posteriors_by_utc_date(seed, games, cfg) {
+            let (model, date_games) = fit?;
+            for g in date_games {
+                let nu = if cfg.ties_allowed_in.contains(&g.phase) {
+                    seed.tie_weight
+                } else {
+                    0.0
+                };
+                let (home, away) = (ratings[&g.home_team], ratings[&g.away_team]);
+                let advantage = if g.neutral { 0.0 } else { cfg.elo.home_advantage };
+                predicted.push(PredictedGame {
+                    game: g.clone(),
+                    bayesian: Prediction::from_probabilities(model.predict(&g.home_team, &g.away_team, g.neutral, &g.phase)?),
+                    elo: Prediction {
+                        probabilities: outcome_probabilities(factor * (home - away + advantage), nu),
+                        expected_home_score: expected_home(home, away, g.neutral, &cfg.elo),
+                    },
+                });
+            }
+            // Elo learns from a date only after all of its games are predicted, matching the Bayesian information set.
+            for g in date_games {
+                apply_game(&mut ratings, g, &cfg.elo)?;
+            }
         }
-        // Elo learns from a date only after all of its games are predicted, matching the Bayesian information set.
-        for g in date_games {
-            apply_game(&mut ratings, g, &cfg.elo)?;
-        }
+        Ok(SeasonPredictions {
+            season: seed.target_season,
+            tie_weight: seed.tie_weight,
+            games: predicted,
+        })
     }
-    Ok(SeasonPredictions {
-        season,
-        tie_weight: seed.tie_weight,
-        games: predicted,
-    })
+}
+
+/// Simulates `season` alone with `Preseason::predict`.
+pub fn predict_season(history: &GameFile, cfg: &LeagueConfig, season: i32) -> Result<SeasonPredictions> {
+    preseasons(history, cfg, season..=season)?[0].predict(cfg)
 }

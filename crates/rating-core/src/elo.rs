@@ -37,8 +37,71 @@ pub fn apply_game(ratings: &mut BTreeMap<String, f64>, game: &Game, cfg: &EloSet
     })
 }
 
+/// Ratings and game counts, replayed game by game from the configured historical start.
+pub(crate) struct Elo<'a> {
+    settings: &'a EloSettings,
+    season: i32,
+    ratings: BTreeMap<String, f64>,
+    counts: BTreeMap<String, usize>,
+}
+
+impl<'a> Elo<'a> {
+    pub(crate) fn new(cfg: &'a LeagueConfig) -> Self {
+        let ratings: BTreeMap<String, f64> = cfg.teams.iter().map(|t| (t.id.clone(), cfg.elo.initial)).collect();
+        let counts = ratings.keys().map(|k| (k.clone(), 0)).collect();
+        Self {
+            settings: &cfg.elo,
+            season: cfg.history_start,
+            ratings,
+            counts,
+        }
+    }
+
+    /// Regresses once for each season boundary since the previous game, then applies the completed `game`.
+    pub(crate) fn apply(&mut self, game: &Game) -> Result<Audit> {
+        while self.season < game.season {
+            for r in self.ratings.values_mut() {
+                *r = regress_rating(*r, self.settings);
+            }
+            self.season += 1;
+        }
+        let audit = apply_game(&mut self.ratings, game, self.settings)?;
+        *self.counts.get_mut(&game.home_team).unwrap() += 1;
+        *self.counts.get_mut(&game.away_team).unwrap() += 1;
+        Ok(audit)
+    }
+
+    /// The ratings after the latest game, without the offseason regression that follows it.
+    pub(crate) fn ratings(&self) -> Vec<Rating> {
+        self.ratings
+            .iter()
+            .map(|(team, &elo)| Rating {
+                team: team.clone(),
+                elo,
+                games: self.counts[team],
+            })
+            .collect()
+    }
+}
+
 /// Replay through the end of a season; callers explicitly regress again for next-season priors.
 pub fn replay_elo(games: &[Game], cfg: &LeagueConfig, through_season: i32) -> Result<EloReplay> {
+    let games = replay_games(games, cfg, through_season)?;
+    let mut elo = Elo::new(cfg);
+    let audit = games
+        .iter()
+        .filter(|g| g.result.is_some())
+        .map(|g| elo.apply(g))
+        .collect::<Result<_>>()?;
+    Ok(EloReplay {
+        ratings: elo.ratings(),
+        audit,
+    })
+}
+
+/// Validates `games` through `through_season` and returns them in replay order. Every season from the historical start
+/// through `through_season` needs a completed game.
+pub(crate) fn replay_games(games: &[Game], cfg: &LeagueConfig, through_season: i32) -> Result<Vec<Game>> {
     cfg.validate()?;
     ensure!(
         (cfg.history_start..=2200).contains(&through_season),
@@ -56,30 +119,5 @@ pub fn replay_elo(games: &[Game], cfg: &LeagueConfig, through_season: i32) -> Re
             "Missing completed historical season {season}"
         );
     }
-    let mut ratings: BTreeMap<String, f64> = cfg.teams.iter().map(|t| (t.id.clone(), cfg.elo.initial)).collect();
-    let mut counts: BTreeMap<String, usize> = ratings.keys().map(|k| (k.clone(), 0)).collect();
-    let mut audit = Vec::new();
-    let mut previous = cfg.history_start;
-    for g in games.iter().filter(|g| g.result.is_some()) {
-        while previous < g.season {
-            for r in ratings.values_mut() {
-                *r = regress_rating(*r, &cfg.elo);
-            }
-            previous += 1;
-        }
-        audit.push(apply_game(&mut ratings, g, &cfg.elo)?);
-        *counts.get_mut(&g.home_team).unwrap() += 1;
-        *counts.get_mut(&g.away_team).unwrap() += 1;
-    }
-    Ok(EloReplay {
-        ratings: ratings
-            .into_iter()
-            .map(|(team, elo)| Rating {
-                games: counts[&team],
-                team,
-                elo,
-            })
-            .collect(),
-        audit,
-    })
+    Ok(games)
 }

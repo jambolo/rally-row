@@ -1,15 +1,38 @@
 use rating_core::{
-    Outcome, apply_game, replay_elo,
-    walk_forward::{Preseason, SeasonPredictions, predict_season, preseason},
+    GameFile, Outcome, apply_game, build_seed, replay_elo,
+    walk_forward::{Preseason, SeasonPredictions, predict_season, preseasons},
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use test_support::evaluation_fixture;
 
 #[test]
+fn one_replay_builds_every_seasons_seed_as_a_replay_ending_before_it_does() {
+    let (cfg, history) = evaluation_fixture();
+    let prepared = preseasons(&history, &cfg, 2003..=2006).unwrap();
+    assert_eq!(prepared.len(), 4);
+    for (season, preseason) in (2003..).zip(&prepared) {
+        let earlier = GameFile {
+            through_season: season - 1,
+            games: history.games.iter().filter(|g| g.season < season).cloned().collect(),
+            ..history.clone()
+        };
+        let (mut seed, _) = build_seed(&earlier, b"", &cfg, b"", season).unwrap();
+        seed.generated_at.clone_from(&preseason.seed.generated_at);
+        assert_eq!(
+            serde_json::to_value(&preseason.seed).unwrap(),
+            serde_json::to_value(&seed).unwrap(),
+            "{season}"
+        );
+        let games: Vec<_> = history.games.iter().filter(|g| g.season == season).collect();
+        assert_eq!(preseason.games.iter().collect::<Vec<_>>(), games, "{season}");
+    }
+}
+
+#[test]
 fn season_elo_updates_match_the_historical_replay() {
     let (cfg, history) = evaluation_fixture();
-    let Preseason { seed, games, .. } = preseason(&history, &cfg, 2005).unwrap();
+    let Preseason { seed, games, .. } = preseasons(&history, &cfg, 2005..=2005).unwrap().remove(0);
     let mut ratings: BTreeMap<_, _> = seed.ratings.iter().map(|r| (r.team.clone(), r.elo)).collect();
     for g in &games {
         apply_game(&mut ratings, g, &cfg.elo).unwrap();
@@ -24,7 +47,10 @@ fn predictions_keep_every_game_in_start_order_with_the_preseason_tie_weight() {
     let (cfg, history) = evaluation_fixture();
     let predicted = predict_season(&history, &cfg, 2005).unwrap();
     assert_eq!(predicted.season, 2005);
-    assert_eq!(predicted.tie_weight, preseason(&history, &cfg, 2005).unwrap().seed.tie_weight);
+    assert_eq!(
+        predicted.tie_weight,
+        preseasons(&history, &cfg, 2005..=2005).unwrap()[0].seed.tie_weight
+    );
     let games: Vec<_> = predicted.games.iter().map(|p| &p.game).collect();
     let expected: Vec<_> = history.games.iter().filter(|g| g.season == 2005).collect();
     assert_eq!(games, expected);
