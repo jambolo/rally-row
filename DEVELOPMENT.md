@@ -73,8 +73,7 @@ Each league has one configuration file in `config/`, named after its league id:
 A league's current season is the UTC year, minus one before its rollover month: NFL games from January
 through March belong to the previous season, and MLB seasons are calendar years. Season defaults use the
 current UTC date. Generated files are ignored by Git: `data/<id>/history.json` from the importer,
-`data/<id>/elo-<target-season>.json` and `data/<id>/elo-audit-<target-season>.json` from Elo, and `data/<id>/simulated-seasons.json` from
-`simulate-season`.
+`data/<id>/elo-<target-season>.json` from Elo, and `data/<id>/simulated-seasons.json` from `simulate-season`.
 
 ```powershell
 cargo run --release -p import-history -- --league nfl --through-season 2025

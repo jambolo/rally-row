@@ -108,7 +108,7 @@ Before each new season, and once before the target season, regression r is appli
 R_{new} = R_0 + (1-r)(R_{old}-R_0).
 ```
 
-This keeps very old results from dominating indefinitely. All historical wins and losses remain in the chronological training sequence. The replay audit, saved beside the seed, records each game's before/after ratings, predicted fractional score, and observed score. Preseason ratings cannot include target-season results; file season boundaries and hashes are checked. [Preseason seed](preseason-seed.md) describes the `generate-preseason-seed` tool and the seed file.
+This keeps very old results from dominating indefinitely. All historical wins and losses remain in the chronological training sequence. Preseason ratings cannot include target-season results; file season boundaries and hashes are checked. [Preseason seed](preseason-seed.md) describes the `generate-preseason-seed` tool and the seed file.
 
 ## Bayesian prior
 

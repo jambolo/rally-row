@@ -40,36 +40,29 @@ fn cli_reads_the_league_config_from_config_dir() {
 }
 
 #[test]
-fn cli_saves_the_replay_audit_apart_from_the_seed() {
+fn cli_saves_only_the_seed_with_its_input_hashes() {
     let tool = ToolDir::new(BIN, &[]);
     let (cfg, history) = evaluation_fixture();
     let config_bytes = tool.write_config(&cfg);
     let history_bytes = tool.write_history(&history);
     let season = history.through_season + 1;
     let output = tool.run(&["--target-season", &season.to_string()]);
-    let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    assert_contains(&stdout, &format!("elo-{season}.json, and their replay to "));
-    assert_contains(&stdout, &format!("elo-audit-{season}.json"));
-    let read =
-        |name: String| -> Value { serde_json::from_slice(&fs::read(tool.path().join("data/nfl").join(name)).unwrap()).unwrap() };
-    let seed = read(format!("elo-{season}.json"));
-    let audit = read(format!("elo-audit-{season}.json"));
-    assert!(seed.get("audit").is_none());
-    assert_eq!(audit["schema_version"], 1);
-    for field in [
-        "league",
-        "target_season",
-        "through_season",
-        "generated_at",
-        "history_sha256",
-        "config_sha256",
-    ] {
-        assert_eq!(audit[field], seed[field], "{field}");
-    }
-    assert_eq!(audit["config_sha256"], digest(&config_bytes));
-    assert_eq!(audit["history_sha256"], digest(&history_bytes));
-    let games = audit["games"].as_array().unwrap();
-    assert_eq!(games.len(), seed["completed_games"].as_u64().unwrap() as usize);
-    assert_eq!(games[0]["game_id"], history.games[0].id.as_str());
+    assert_contains(
+        &String::from_utf8_lossy(&output.stdout),
+        "from 25 completed games (5 ties) to ",
+    );
+    let dir = tool.path().join("data/nfl");
+    let seed: Value = serde_json::from_slice(&fs::read(dir.join(format!("elo-{season}.json"))).unwrap()).unwrap();
+    assert_eq!(seed["config_sha256"], digest(&config_bytes));
+    assert_eq!(seed["history_sha256"], digest(&history_bytes));
+    let mut files: Vec<_> = fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect();
+    files.sort();
+    assert_eq!(
+        files,
+        [format!("elo-{season}.json"), "elo.lock".into(), "history.json".into()]
+    );
 }

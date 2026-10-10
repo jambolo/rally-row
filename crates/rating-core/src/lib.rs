@@ -292,22 +292,6 @@ pub struct EloSeed {
     pub tie_weight: f64,
     pub ratings: Vec<Rating>,
 }
-pub const ELO_AUDIT_SCHEMA_VERSION: u32 = 1;
-
-/// `data/<league>/elo-audit-<season>.json`: the replay behind `elo-<season>.json`, kept apart because the browser
-/// doesn't read it.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct EloAudit {
-    pub schema_version: u32,
-    pub league: String,
-    pub target_season: i32,
-    pub through_season: i32,
-    pub generated_at: String,
-    pub history_sha256: String,
-    pub config_sha256: String,
-    /// One entry per replayed game, in replay order.
-    pub games: Vec<Audit>,
-}
 pub const SIMULATED_SEASONS_SCHEMA_VERSION: u32 = 1;
 
 /// `data/<league>/simulated-seasons.json`: pregame predictions for every game of the simulated seasons, made with the
@@ -906,7 +890,7 @@ pub fn build_seed(
     cfg: &LeagueConfig,
     config_bytes: &[u8],
     target: i32,
-) -> Result<(EloSeed, EloAudit)> {
+) -> Result<EloSeed> {
     cfg.validate()?;
     ensure!(
         history.teams == cfg.teams,
@@ -930,25 +914,14 @@ pub fn build_seed(
         "History contains a game outside its declared training period"
     );
     let mut seed = None;
-    let audit = replay_seeds(&history.games, history_bytes, cfg, config_bytes, target..=target, |s, _| {
+    replay_seeds(&history.games, history_bytes, cfg, config_bytes, target..=target, |s, _| {
         seed = Some(s)
     })?;
-    let seed = seed.expect("one target season");
-    let audit = EloAudit {
-        schema_version: ELO_AUDIT_SCHEMA_VERSION,
-        league: seed.league.clone(),
-        target_season: seed.target_season,
-        through_season: seed.through_season,
-        generated_at: seed.generated_at.clone(),
-        history_sha256: seed.history_sha256.clone(),
-        config_sha256: seed.config_sha256.clone(),
-        games: audit,
-    };
-    Ok((seed, audit))
+    Ok(seed.expect("one target season"))
 }
 
 /// Replays `games` once, through the season before the last of `seasons`, and passes `preseason` each season's seed with
-/// the tie history that set its tie weight, both from the seasons before it only. Returns the replay audit.
+/// the tie history that set its tie weight, both from the seasons before it only.
 pub(crate) fn replay_seeds(
     games: &[Game],
     history_bytes: &[u8],
@@ -956,20 +929,19 @@ pub(crate) fn replay_seeds(
     config_bytes: &[u8],
     seasons: RangeInclusive<i32>,
     mut preseason: impl FnMut(EloSeed, &bayesian::TieHistory),
-) -> Result<Vec<Audit>> {
+) -> Result<()> {
     let games = elo::replay_games(games, cfg, seasons.end() - 1)?;
     ensure!(cfg.history_start < *seasons.start(), "Invalid Elo replay end season");
     let generated_at = Utc::now().to_rfc3339();
     let (history_sha256, config_sha256) = (digest(history_bytes), digest(config_bytes));
     let mut elo = elo::Elo::new(cfg);
     let mut ties = bayesian::TieHistory::default();
-    let mut audit = Vec::new();
+    let mut completed_games = 0;
     let mut completed = games.iter().filter(|g| g.result.is_some()).peekable();
     for target in seasons {
         while let Some(g) = completed.next_if(|g| g.season < target) {
-            let entry = elo.apply(g)?;
-            ties.add(g, &entry, cfg);
-            audit.push(entry);
+            ties.add(g, &elo.apply(g)?, cfg);
+            completed_games += 1;
         }
         let mut ratings = elo.ratings();
         // Apply exactly one offseason regression between the final historical season and the target.
@@ -985,14 +957,14 @@ pub(crate) fn replay_seeds(
             history_sha256: history_sha256.clone(),
             config_sha256: config_sha256.clone(),
             settings: cfg.elo.clone(),
-            completed_games: audit.len(),
+            completed_games,
             tied_games: ties.tied_games,
             tie_weight: ties.estimate(&cfg.bayesian),
             ratings,
         };
         preseason(seed, &ties);
     }
-    Ok(audit)
+    Ok(())
 }
 
 #[cfg(test)]

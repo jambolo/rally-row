@@ -24,18 +24,15 @@ fn main() -> Result<()> {
     let dir = args.data_dir.join(&cfg.id);
     let _lock = lock(&dir.join("elo.lock"))?;
     let (history, history_bytes) = load_history(&args.data_dir, &cfg)?;
-    let (seed, audit) = build_seed(&history, &history_bytes, &cfg, &config_bytes, season)?;
+    let seed = build_seed(&history, &history_bytes, &cfg, &config_bytes, season)?;
     let path = dir.join(format!("elo-{season}.json"));
-    let audit_path = dir.join(format!("elo-audit-{season}.json"));
-    write_json(&audit_path, &audit)?;
     write_json(&path, &seed)?;
     println!(
-        "Saved {} team priors for {season} from {} completed games ({} ties) to {}, and their replay to {}",
+        "Saved {} team priors for {season} from {} completed games ({} ties) to {}",
         seed.ratings.len(),
         seed.completed_games,
         seed.tied_games,
-        path.display(),
-        audit_path.display()
+        path.display()
     );
     Ok(())
 }

@@ -50,9 +50,9 @@ binaries in `apps/` are thin CLIs over it, so logic two tools share belongs in t
 1. `import-history --league <id>` downloads the provider's history through the league's source adapter and
    writes `data/<id>/history.json`. It replaces the file only if every season is complete, so a failure leaves the
    previous file in place.
-2. `generate-preseason-seed --league <id>` replays history and writes `data/<id>/elo-<season>.json` and its replay
-   audit, `data/<id>/elo-audit-<season>.json`. The seed embeds SHA-256 hashes of the config and history bytes. The browser rejects a seed whose hashes don't match,
-   so rerun `generate-preseason-seed` after any config or history change.
+2. `generate-preseason-seed --league <id>` replays history and writes `data/<id>/elo-<season>.json`. The seed
+   embeds SHA-256 hashes of the config and history bytes. The browser rejects a seed whose hashes don't match, so
+   rerun `generate-preseason-seed` after any config or history change.
 3. `elo-tune` and `bayes-tune` are offline parameter searches. They never modify config.
 4. `simulate-season --league <id>` simulates the held-out seasons, which tuning never uses, one UTC date at a time
    with the configured settings and writes every game's pregame Bayesian and Elo predictions to

@@ -9,7 +9,7 @@ const projectRoot = resolve(import.meta.dirname, '../..');
 
 /** The source file under the project root and the published bytes for each site path the app reads, or null for a
  * path it doesn't. The app checks a seed against its history by hash alone, so the history publishes as its SHA-256.
- * Everything else in `data/`, such as Elo audits and simulated seasons, is for the offline tools.
+ * Everything else in `data/`, such as simulated seasons, is for the offline tools.
  */
 function source(path: string): { file: string; publish: (bytes: Buffer) => Buffer | string } | null {
   if (/^config\/[a-zA-Z0-9-]+\.json$/.test(path) || /^data\/[a-zA-Z0-9-]+\/elo-\d+\.json$/.test(path))

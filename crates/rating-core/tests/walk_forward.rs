@@ -17,7 +17,7 @@ fn one_replay_builds_every_seasons_seed_as_a_replay_ending_before_it_does() {
             games: history.games.iter().filter(|g| g.season < season).cloned().collect(),
             ..history.clone()
         };
-        let (mut seed, _) = build_seed(&earlier, b"", &cfg, b"", season).unwrap();
+        let mut seed = build_seed(&earlier, b"", &cfg, b"", season).unwrap();
         seed.generated_at.clone_from(&preseason.seed.generated_at);
         assert_eq!(
             serde_json::to_value(&preseason.seed).unwrap(),
