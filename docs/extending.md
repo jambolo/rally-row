@@ -8,7 +8,7 @@ Adding a league takes these steps:
 2. Use an existing source adapter, or add one in both languages ([Source adapters](#source-adapters)).
 3. Add its id to the browser's league registry ([League registry](#league-registry)).
 4. Generate its history and Elo seed, then tune and backtest it ([Generate and publish data](#generate-and-publish-data)).
-5. Add its importer and Elo invocations to `.github/workflows/pages.yml` so the site publishes its data.
+5. Add its `import-history` and `generate-preseason-seed` invocations to `.github/workflows/pages.yml` so the site publishes its data.
 
 ## Configuration
 
@@ -214,11 +214,11 @@ The generic `canonical-json` HTTPS endpoint returns all relevant historical seas
 
 Normalization sorts by `(season, start_time_utc, id)`, using IANA timezone rules for historical daylight saving offsets. A missing date is a source error and aborts the import without replacing the saved history. A missing time (omitted, null, or empty) or a time in a daylight saving gap uses local midnight. A repeated time during a daylight saving overlap uses the earlier UTC occurrence. The importer prints warnings to stderr identifying each affected game and the fallback or selected occurrence. If local midnight itself does not exist, import fails. Historical output discards the original local fields. The current-season browser retains them for display and provider-specific result eligibility.
 
-The importer accepts this exact envelope from HTTPS or through its `--input` file option. The browser app downloads from the provider itself and saves only the current season. The Elo program reads only the historical JSON, so it works with any provider.
+The importer accepts this exact envelope from HTTPS or through its `--input` file option ([Saved provider files](history-import.md#saved-provider-files)). The browser app downloads from the provider itself and saves only the current season. `generate-preseason-seed` reads only the historical JSON, so it works with any provider.
 
 ## Historical output
 
-The importer writes `data/<league>/history.json` with these fields:
+The [importer](history-import.md) writes `data/<league>/history.json` with these fields:
 
 | Field | Contents |
 | --- | --- |
@@ -265,7 +265,7 @@ Generate the Elo seed from the published history and configuration so its SHA-25
 
 `leagueIds` in `apps/web/src/leagues.ts` is the browser's only list of league ids (`['nfl', 'mlb']`). Each id names its published configuration, `config/<id>.json`. Adding an id adds the league to the header's **League** switcher and makes `#<id>` a valid address hash. Registry order breaks ties in the default-league rule ([Windows](#windows)). The rest of the app has no league ids or labels; it reads them from the configuration and the league's adapter.
 
-The Vite build (`apps/web/vite.config.ts`) serves and publishes every JSON file under the repository's `config/` and `data/` directories, as `config/<id>.json`, `data/<id>/history.json`, and `data/<id>/elo-<season>.json`. If a program writes to another data directory, copy its outputs into `data/<id>/` before building.
+The Vite build (`apps/web/vite.config.ts`) serves and publishes what the app reads from the repository's `config/` and `data/` directories: `config/<id>.json`, `data/<id>/elo-<season>.json`, and `data/<id>/history.sha256`, the SHA-256 of `data/<id>/history.json`, in place of the history itself. If a program writes to another data directory, copy its outputs into `data/<id>/` before building.
 
 ## Browser storage
 
@@ -283,11 +283,11 @@ The IndexedDB module is `apps/web/src/persistence.ts`, and `apps/web/src/small-s
 
 ## Generate and publish data
 
-Every command-line program and the backtest take `--league <id>`, `--config-dir <dir>` (default `config`), and `--data-dir <dir>` (default `data`). [Data and configuration](../DEVELOPMENT.md#data-and-configuration) lists every option and the commands for the shipped leagues; [Tuning](../DEVELOPMENT.md#tuning), [Model evaluation](../DEVELOPMENT.md#model-evaluation), and [Backtesting](../DEVELOPMENT.md#backtesting) cover evaluation. For a new league, generate its history and current-season seed:
+Every command-line program and the backtest take `--league <id>`, `--config-dir <dir>` (default `config`), and `--data-dir <dir>` (default `data`). [Data and configuration](../DEVELOPMENT.md#data-and-configuration) lists every option and the commands for the shipped leagues; [Tuning](../DEVELOPMENT.md#tuning), [Model evaluation](../DEVELOPMENT.md#model-evaluation), and [Backtesting](../DEVELOPMENT.md#backtesting) cover evaluation. Each tool has its own page: [History import](history-import.md), [Preseason seed](preseason-seed.md), [Elo tuning](elo-tuning.md), [Bayesian tuning](bayesian-tuning.md), [Model evaluation](model-evaluation.md), [Season simulation](season-simulation.md), and [Backtesting](backtesting.md). For a new league, generate its history and current-season seed:
 
 ```text
-cargo run --release -p history-importer -- --league <id>
-cargo run --release -p elo-ratings -- --league <id>
+cargo run --release -p import-history -- --league <id>
+cargo run --release -p generate-preseason-seed -- --league <id>
 ```
 
 To publish it, add the same two invocations to the `Generate league data` step of [`pages.yml`](../.github/workflows/pages.yml), after the existing leagues and one command per line, so a failure fails the build:
@@ -295,12 +295,12 @@ To publish it, add the same two invocations to the `Generate league data` step o
 ```yaml
       - name: Generate league data
         run: |
-          cargo run --release -p history-importer -- --league nfl
-          cargo run --release -p elo-ratings -- --league nfl
-          cargo run --release -p history-importer -- --league mlb
-          cargo run --release -p elo-ratings -- --league mlb
-          cargo run --release -p history-importer -- --league <id>
-          cargo run --release -p elo-ratings -- --league <id>
+          cargo run --release -p import-history -- --league nfl
+          cargo run --release -p generate-preseason-seed -- --league nfl
+          cargo run --release -p import-history -- --league mlb
+          cargo run --release -p generate-preseason-seed -- --league mlb
+          cargo run --release -p import-history -- --league <id>
+          cargo run --release -p generate-preseason-seed -- --league <id>
 ```
 
 The workflow's monthly scheduled build then publishes the league's new-season seed after its `season_rollover_month`.

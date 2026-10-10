@@ -15,8 +15,8 @@ Run from the repository root. The docs write commands in PowerShell, and CI runs
 pnpm -C apps/web install --frozen-lockfile
 
 # Generate local data (needs network; output in data/ is gitignored). Required before the app works locally.
-cargo run --release -p history-importer -- --league nfl
-cargo run --release -p elo-ratings -- --league nfl      # repeat both for --league mlb
+cargo run --release -p import-history -- --league nfl
+cargo run --release -p generate-preseason-seed -- --league nfl      # repeat both for --league mlb
 
 pnpm -C apps/web dev                                    # served under /rally-row/; VITE_BASE overrides
 
@@ -47,12 +47,12 @@ adapters, Elo replay, the Bayesian model, tuning validation and the tuners' sear
 season-by-season prediction from earlier UTC dates (`walk_forward.rs`), and forecast scores (`scoring.rs`). The
 binaries in `apps/` are thin CLIs over it, so logic two tools share belongs in the library.
 
-1. `history-importer --league <id>` downloads the provider's history through the league's source adapter and
+1. `import-history --league <id>` downloads the provider's history through the league's source adapter and
    writes `data/<id>/history.json`. It replaces the file only if every season is complete, so a failure leaves the
    previous file in place.
-2. `elo-ratings --league <id>` replays history and writes `data/<id>/elo-<season>.json`. The seed embeds SHA-256
-   hashes of the config and history bytes. The browser and the backtest reject a seed whose hashes don't match,
-   so rerun `elo-ratings` after any config or history change.
+2. `generate-preseason-seed --league <id>` replays history and writes `data/<id>/elo-<season>.json` and its replay
+   audit, `data/<id>/elo-audit-<season>.json`. The seed embeds SHA-256 hashes of the config and history bytes. The browser and the backtest reject a seed whose hashes don't match,
+   so rerun `generate-preseason-seed` after any config or history change.
 3. `elo-tune` and `bayes-tune` are offline parameter searches. They never modify config.
 4. `evaluate-model` scores the model's predictions, made with the configured settings, on held-out seasons, which
    tuning never uses. It compares Bayesian predictions with in-season Elo ratings.
@@ -61,8 +61,10 @@ binaries in `apps/` are thin CLIs over it, so logic two tools share belongs in t
    embeds config and history hashes; consumers should reject a file whose hashes don't match. The per-season
    prediction (`walk_forward::predict_season`) and the file contract (`SimulatedSeasons`) live in `rating-core`.
 
-The custom `projectData` plugin in `apps/web/vite.config.ts` serves the root `config/` and `data/` directories
-in dev, and copies them into the build.
+The custom `projectData` plugin in `apps/web/vite.config.ts` serves the files the app reads from the root `config/`
+and `data/` directories in dev, and copies them into the build: `config/<id>.json`, `data/<id>/elo-<season>.json`, and
+`data/<id>/history.sha256`, the SHA-256 of `history.json`, in place of the history itself. Nothing else under `data/` is
+published.
 
 ### Browser runtime (`apps/web/src`)
 
@@ -120,5 +122,12 @@ the CD workflow then tags them and merges `master` back into `develop`. Pages de
 - `docs/model.md`: statistical methodology (Elo, the Davidson–Bradley–Terry Bayesian model, two-way
   moneylines, tuning, model evaluation).
 - `docs/extending.md`: adding leagues and source adapters, and the parity-fixture table.
-- `docs/season-simulation.md`: the `simulate-season` tool, its season simulation, and the
-  `simulated-seasons.json` format.
+- One page per tool, covering its options, checks, errors, and output. Keep each in sync with its tool's CLI and
+  output format:
+  - `docs/history-import.md`: `import-history` and saved provider files.
+  - `docs/preseason-seed.md`: `generate-preseason-seed` and the `elo-<season>.json` seed format.
+  - `docs/elo-tuning.md`: `elo-tune`, the split options and checks the evaluation tools share, and its report.
+  - `docs/bayesian-tuning.md`: `bayes-tune` and its report.
+  - `docs/model-evaluation.md`: `evaluate-model`, its summary, and its report.
+  - `docs/season-simulation.md`: `simulate-season`, its season simulation, and the `simulated-seasons.json` format.
+  - `docs/backtesting.md`: the Node backtest (`apps/web/scripts/backtest.ts`).

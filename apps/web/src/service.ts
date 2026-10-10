@@ -181,14 +181,14 @@ export class PredictionService {
       try {
         published = await readSeedWithHash(
           `${dir}/elo-${this.season}.json`,
-          `${dir}/history.json`,
+          `${dir}/history.sha256`,
           this.config,
           this.options.configHash,
           this.season,
         );
       } catch (e) {
         throw new Error(
-          `Current-season data is available, but the published initial ratings could not be loaded. ${message(e)}. Run history-importer followed by elo-ratings, then rebuild the site.`,
+          `Current-season data is available, but the published initial ratings could not be loaded. ${message(e)}. Run import-history followed by generate-preseason-seed, then rebuild the site.`,
           { cause: e },
         );
       }

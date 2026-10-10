@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { RefreshMessage } from '../src/refresh-worker.ts';
 import { snapshotKey } from '../src/snapshot.ts';
 import { version as appVersion } from '../package.json';
-import { config, configBytes, historyBytes, seed } from './helpers.ts';
+import { config, configBytes, historyHashFile, seed } from './helpers.ts';
 
 afterEach(() => vi.useRealTimers());
 
@@ -58,7 +58,7 @@ it('builds, reuses, and upgrades snapshots through the bundled worker without wi
     fetch: async (url: string, init?: RequestInit) => {
       requests.push({ url, cache: init?.cache });
       if (url.endsWith('/config/nfl.json')) return new Response(configBytes);
-      if (url.endsWith('/history.json')) return new Response(historyBytes);
+      if (url.endsWith('/history.sha256')) return new Response(historyHashFile);
       if (url.endsWith('/elo-2026.json'))
         return seedAvailable ? new Response(JSON.stringify(seed())) : new Response('missing', { status: 404 });
       if (url === config.source.url)
@@ -90,7 +90,7 @@ it('builds, reuses, and upgrades snapshots through the bundled worker without wi
   expect(messages).toContainEqual({ type: 'progress', phase: 'building' });
   expect(requests.find((r) => r.url === config.source.url)?.cache).toBe('no-cache');
   expect(requests.find((r) => r.url.endsWith('/elo-2026.json'))?.cache).toBe('no-cache');
-  expect(requests.find((r) => r.url.endsWith('/history.json'))?.cache).toBe('no-cache');
+  expect(requests.find((r) => r.url.endsWith('/history.sha256'))?.cache).toBe('no-cache');
   expect(JSON.parse(result.cache[snapshotKey('nfl')]).app_version).toBe(appVersion);
 
   const reused = await run(result.cache);

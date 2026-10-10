@@ -108,7 +108,7 @@ Before each new season, and once before the target season, regression r is appli
 R_{new} = R_0 + (1-r)(R_{old}-R_0).
 ```
 
-This keeps very old results from dominating indefinitely. All historical wins and losses remain in the chronological training sequence. The audit records each game's before/after ratings, predicted fractional score, and observed score. Preseason ratings cannot include target-season results; file season boundaries and hashes are checked.
+This keeps very old results from dominating indefinitely. All historical wins and losses remain in the chronological training sequence. The replay audit, saved beside the seed, records each game's before/after ratings, predicted fractional score, and observed score. Preseason ratings cannot include target-season results; file season boundaries and hashes are checked. [Preseason seed](preseason-seed.md) describes the `generate-preseason-seed` tool and the seed file.
 
 ## Bayesian prior
 
@@ -196,7 +196,7 @@ only results from strictly earlier days count:
 
 Same-day and later outcomes are excluded because the data does not record game-end timestamps.
 
-The offline Bayesian backtest and Bayesian tuning use earlier **UTC dates** only, for every league.
+The offline Bayesian [backtest](backtesting.md) and Bayesian tuning use earlier **UTC dates** only, for every league.
 Same-day outcomes cannot influence one another, even with mixed source timezones. For MLB, a late game whose
 UTC start falls on the day after its official date is predicted in the next UTC date's batch, so earlier
 games of the same official date can inform it there, unlike in the app. For each evaluated season,
@@ -321,6 +321,7 @@ calibration bins, paired differences and descriptive standard errors, the ten lo
 input SHA-256 hashes, and an RFC 3339 UTC run-start timestamp (`run_at`). Positive MSE improvement means the
 selected settings performed better. With only a few held-out seasons, a small or inconsistent improvement may
 be noise. Changing the search after reading held-out scores would make them useless for evaluation.
+[Elo tuning](elo-tuning.md) covers running `elo-tune` and every report field.
 
 Both tuners' reports describe the search: `search.grid_source` (`default` or `config`), `search.coarse_grid`
 (the starting grid), `search.evaluated_ranges` (the minimum and maximum evaluated value of each parameter),
@@ -382,6 +383,7 @@ loss/Brier scores, first/second season halves, per-outcome calibration, expected
 paired season differences. They also include the search fields described under [Elo-only tuning](#elo-only-tuning).
 [Reading the scores](#reading-the-scores) defines log loss and Brier score. Positive log-loss
 improvement means the selected parameters performed better. Neither tuning process automatically changes model settings.
+[Bayesian tuning](bayesian-tuning.md) covers running `bayes-tune` and every report field.
 
 ## Model evaluation
 
@@ -418,7 +420,8 @@ two favorites differ and which favorite won, and reports the mean and maximum ab
 probability.
 
 `simulate-season` saves the Bayesian and Elo predictions behind these scores, game by game, so other tools can
-evaluate them without refitting; see [Season simulation](season-simulation.md).
+evaluate them without refitting; see [Season simulation](season-simulation.md). [Model evaluation](model-evaluation.md)
+covers running `evaluate-model`, its summary, and every report field.
 
 ## Postseason simulation
 

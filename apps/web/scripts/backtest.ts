@@ -39,9 +39,9 @@ const seed = seedSchema.parse(JSON.parse(await readFile(resolve(dir, `elo-${seas
 if (seed.league !== config.id || seed.target_season !== season || seed.through_season !== season - 1)
   throw new Error('Elo seed is for the wrong league or season; run the two Rust programs');
 if (seed.config_sha256 !== (await digest(configBytes)))
-  throw new Error('Configuration changed since Elo was calculated; rerun elo-ratings');
+  throw new Error('Configuration changed since Elo was calculated; rerun generate-preseason-seed');
 if ((await digest(await readFile(resolve(dir, 'history.json')))) !== seed.history_sha256)
-  throw new Error('History changed since Elo was calculated; rerun elo-ratings');
+  throw new Error('History changed since Elo was calculated; rerun generate-preseason-seed');
 
 const texts: string[] = [];
 for (const url of adapterFor(config).seasonUrls(config, season)) texts.push(await download(url));

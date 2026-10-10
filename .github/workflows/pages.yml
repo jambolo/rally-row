@@ -55,10 +55,10 @@ jobs:
       # The browser app reads these as static assets; they are generated, never committed.
       - name: Generate league data
         run: |
-          cargo run --release -p history-importer -- --league nfl
-          cargo run --release -p elo-ratings -- --league nfl
-          cargo run --release -p history-importer -- --league mlb
-          cargo run --release -p elo-ratings -- --league mlb
+          cargo run --release -p import-history -- --league nfl
+          cargo run --release -p generate-preseason-seed -- --league nfl
+          cargo run --release -p import-history -- --league mlb
+          cargo run --release -p generate-preseason-seed -- --league mlb
       - run: pnpm install --frozen-lockfile
         working-directory: apps/web
       - name: Build

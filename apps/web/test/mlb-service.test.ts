@@ -11,8 +11,7 @@ import { digest, memoryStore, type Store } from '../src/storage.ts';
 const configBytes = readFileSync(new URL('../../../config/mlb.json', import.meta.url));
 const config = configSchema.parse(JSON.parse(configBytes.toString()));
 const configHash = await digest(configBytes);
-const historyBytes = 'mlb history';
-const historyHash = await digest(historyBytes);
+const historyHash = await digest('mlb history');
 const dataBase = 'https://published.test/data';
 const seasonUrl = 'https://statsapi.mlb.com/api/v1/schedule?sportId=1&season=2026&gameType=R,F,D,L,W';
 
@@ -34,7 +33,7 @@ function seed(): EloSeed {
 }
 function publish() {
   const published: Record<string, string> = {
-    [`${dataBase}/mlb/history.json`]: historyBytes,
+    [`${dataBase}/mlb/history.sha256`]: historyHash,
     [`${dataBase}/mlb/elo-2026.json`]: JSON.stringify(seed()),
   };
   vi.stubGlobal('fetch', (input: string | URL | Request) => {

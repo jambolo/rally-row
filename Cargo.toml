@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["apps/history-importer", "apps/elo-ratings", "apps/elo-tune", "apps/bayes-tune", "apps/evaluate-model", "apps/simulate-season", "crates/rating-core", "crates/test-support"]
+members = ["apps/import-history", "apps/generate-preseason-seed", "apps/elo-tune", "apps/bayes-tune", "apps/evaluate-model", "apps/simulate-season", "crates/rating-core", "crates/test-support"]
 
 [workspace.package]
 version = "1.5.0"

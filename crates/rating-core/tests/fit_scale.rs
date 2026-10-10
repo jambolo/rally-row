@@ -75,7 +75,6 @@ fn synthetic_season(value: u32, cfg: &LeagueConfig) -> (EloSeed, Vec<Game>) {
                 games: 162,
             })
             .collect(),
-        audit: Vec::new(),
     };
     (seed, games)
 }

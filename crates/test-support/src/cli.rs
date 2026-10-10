@@ -173,14 +173,14 @@ pub fn assert_rejects_unusable_history(tool: &ToolDir, cfg: &LeagueConfig, histo
     for version in [1, 2] {
         obsolete["schema_version"] = json!(version);
         tool.write_history(&obsolete);
-        assert_contains(&tool.error(&[]), "rerun history-importer");
+        assert_contains(&tool.error(&[]), "rerun import-history");
     }
     obsolete["schema_version"] = json!(HISTORY_SCHEMA_VERSION);
     obsolete["games"][0].as_object_mut().unwrap().remove("start_time_utc");
     tool.write_history(&obsolete);
     let error = tool.error(&[]);
     assert_contains(&error, "start_time_utc");
-    assert_contains(&error, "rerun history-importer");
+    assert_contains(&error, "rerun import-history");
     tool.write_history(history);
     assert_contains(&tool.error(&["--test-end", &split.tune_end.to_string()]), "held-out seasons");
     let past_history = (history.through_season + 1).to_string();

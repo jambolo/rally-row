@@ -50,11 +50,11 @@ pub fn validate(history: &GameFile, cfg: &LeagueConfig, split: Split) -> Result<
     );
     ensure!(
         history.schema_version == HISTORY_SCHEMA_VERSION && history.league == cfg.id && history.teams == cfg.teams,
-        "History schema, league, or franchise identities do not match configuration; rerun history-importer"
+        "History schema, league, or franchise identities do not match configuration; rerun import-history"
     );
     ensure!(
         history.from_season == cfg.history_start && history.through_season >= split.test_end,
-        "History must cover {} through {}; rerun history-importer with --through-season {}",
+        "History must cover {} through {}; rerun import-history with --through-season {}",
         cfg.history_start,
         split.test_end,
         split.test_end

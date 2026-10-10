@@ -6,7 +6,7 @@ import type { SessionView } from '../src/session.ts';
 import { readSnapshot, snapshotKey } from '../src/snapshot.ts';
 import { currentCacheKey, memoryStore, type Store } from '../src/storage.ts';
 import { fakeIndexedDb } from './fake-indexeddb.ts';
-import { config, configBytes, configHash, game, historyBytes, seed } from './helpers.ts';
+import { config, configBytes, configHash, game, historyHashFile, seed } from './helpers.ts';
 
 beforeEach(() => {
   vi.resetModules();
@@ -54,7 +54,7 @@ it('builds the same storage keys and lock name as before for nfl', async () => {
 
 it('ignores a snapshot saved for another league', async () => {
   vi.stubGlobal('fetch', (url: string) =>
-    Promise.resolve(new Response(url.endsWith('history.json') ? historyBytes : JSON.stringify(seed()))),
+    Promise.resolve(new Response(url.endsWith('history.sha256') ? historyHashFile : JSON.stringify(seed()))),
   );
   const store = memoryStore();
   await new PredictionService({

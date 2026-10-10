@@ -6,7 +6,7 @@ import * as postseason from '../src/postseason.ts';
 import type { LeagueConfig } from '../src/contracts.ts';
 import { readSnapshot, snapshotKey } from '../src/snapshot.ts';
 import { digest, memoryStore, type Store } from '../src/storage.ts';
-import { config, configHash, game, historyBytes, seed } from './helpers.ts';
+import { config, configHash, game, historyHashFile, seed } from './helpers.ts';
 import { version as appVersion } from '../package.json';
 
 const now = () => new Date('2026-09-19T18:00:00Z');
@@ -18,7 +18,7 @@ const cacheKey = 'game-results-prediction:nfl:current-2026';
 /** Stands in for the published static assets the Rust programs generate. */
 function publish(files: Record<string, string> = {}) {
   const published: Record<string, string> = {
-    [`${dataBase}/nfl/history.json`]: historyBytes,
+    [`${dataBase}/nfl/history.sha256`]: historyHashFile,
     [`${dataBase}/nfl/elo-2026.json`]: JSON.stringify(seed()),
     ...files,
   };
@@ -62,7 +62,7 @@ it('refreshes once per startup, uses each result once, and does not rewrite hist
   expect(JSON.parse(store.getItem(cacheKey)!).schema_version).toBe(2);
   expect(a.predict('SEA', 'SF', true, 'regular')).toEqual(b.predict('SEA', 'SF', true, 'regular'));
   expect(requests.every((r) => r.method === 'GET')).toBe(true);
-  expect(published[`${dataBase}/nfl/history.json`]).toBe(historyBytes);
+  expect(published[`${dataBase}/nfl/history.sha256`]).toBe(historyHashFile);
   expect(JSON.parse(published[`${dataBase}/nfl/elo-2026.json`]!)).toEqual(seed());
 });
 
@@ -125,7 +125,7 @@ it('revalidates published inputs and skips fitting for unchanged normalized data
   expect(fitted).not.toHaveBeenCalled();
   expect(requests).toEqual([
     { url: `${dataBase}/nfl/elo-2026.json`, method: 'GET', cache: 'no-cache' },
-    { url: `${dataBase}/nfl/history.json`, method: 'GET', cache: 'no-cache' },
+    { url: `${dataBase}/nfl/history.sha256`, method: 'GET', cache: 'no-cache' },
   ]);
   expect(progress.mock.calls).toEqual([['checking']]);
   expect(second.predict('SEA', 'SF', true, 'regular')).toEqual(first.predict('SEA', 'SF', true, 'regular'));
@@ -147,9 +147,8 @@ it.each(['seed only', 'history and seed'])('rebuilds unchanged games after a pub
     updated.ratings.find((t) => t.team === 'SEA')!.elo += 150;
     updated.ratings.find((t) => t.team === 'SF')!.elo -= 150;
   } else {
-    const history = `${historyBytes} corrected`;
-    published[`${dataBase}/nfl/history.json`] = history;
-    updated.history_sha256 = await digest(history);
+    updated.history_sha256 = await digest('history corrected');
+    published[`${dataBase}/nfl/history.sha256`] = updated.history_sha256;
     updated.completed_games += 1;
   }
   const seedBytes = JSON.stringify(updated);
@@ -189,7 +188,7 @@ it.each([
   const saved = store.getItem(snapshotKey('nfl'));
   const cachedGames = store.getItem(cacheKey);
   const updated = seed();
-  if (failure === 'history mismatch') published[`${dataBase}/nfl/history.json`] = 'different history';
+  if (failure === 'history mismatch') published[`${dataBase}/nfl/history.sha256`] = await digest('different history');
   else if (failure === 'wrong league') updated.league = 'other';
   else if (failure === 'wrong season') updated.target_season -= 1;
   else if (failure === 'wrong configuration') updated.config_sha256 = '0'.repeat(64);
@@ -212,7 +211,7 @@ it.each([
   expect(store.getItem(cacheKey)).toBe(cachedGames);
 });
 
-it.each(['elo-2026.json', 'history.json'])('retains the snapshot if the freshness check cannot fetch %s', async (file) => {
+it.each(['elo-2026.json', 'history.sha256'])('retains the snapshot if the freshness check cannot fetch %s', async (file) => {
   const { published } = publish();
   const store = memoryStore();
   const first = service(store, async () => csv);
