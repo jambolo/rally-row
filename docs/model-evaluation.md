@@ -1,7 +1,8 @@
 # Model evaluation
 
 `evaluate-model` scores the model's predictions, made with the configured (tuned) settings, on a league's held-out
-seasons. It compares two ways of learning from in-season results on the same games: the app's Bayesian model and Elo
+seasons. It scores the predictions [`simulate-season`](season-simulation.md) saves rather than making its own. It
+compares two ways of learning from in-season results on the same games: the app's Bayesian model and Elo
 ratings updated after every game, with an equal-strength baseline for reference. The tuners never use the held-out
 seasons to select parameters, so their scores measure forecasting skill fairly.
 [Model evaluation](model.md#model-evaluation) describes the method, and
@@ -9,13 +10,15 @@ seasons to select parameters, so their scores measure forecasting skill fairly.
 
 ## Running the tool
 
-[Import the league's history](history-import.md) through the last held-out season first. The tool runs offline
-against `data/<id>/history.json` and the league configuration; it doesn't use published Elo seeds. It scores whatever
-the configuration holds, so adopt tuned parameters before running it.
+[Import the league's history](history-import.md) through the last held-out season, then run
+[`simulate-season`](season-simulation.md). The tool runs offline: it reads `data/<id>/simulated-seasons.json` and
+checks it against the league configuration and `data/<id>/history.json`. It doesn't use published Elo seeds. The
+predictions use the configuration as it was when `simulate-season` ran, so after adopting tuned parameters, rerun
+`simulate-season` before this tool.
 
 ```powershell
+cargo run --release -p simulate-season -- --league nfl
 cargo run --release -p evaluate-model -- --league nfl
-cargo run --release -p evaluate-model -- --league mlb
 
 # Print the full JSON report instead of the summary
 cargo run --release -p evaluate-model -- --league nfl --json
@@ -23,31 +26,39 @@ cargo run --release -p evaluate-model -- --league nfl --json
 # Also save the JSON report
 cargo run --release -p evaluate-model -- --league nfl --report-dir target
 
-# Split overrides; the held-out seasons are tune_end + 1 through test_end
-cargo run --release -p evaluate-model -- --league nfl --tune-end 2022 --test-end 2025
+# Other held-out seasons: simulate them, then score the simulation
+cargo run --release -p simulate-season -- --league nfl --tune-end 2022 --test-end 2025
+cargo run --release -p evaluate-model -- --league nfl
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--league <id>` | Required. Reads `<config-dir>/<id>.json`, whose `id` must equal `<id>`. Ids use letters, digits, and hyphens. |
 | `--config-dir <dir>` | Configuration directory; default `config`. |
-| `--data-dir <dir>` | Data directory; default `data`. Reads `<dir>/<id>/history.json`. |
+| `--data-dir <dir>` | Data directory; default `data`. Reads `<dir>/<id>/simulated-seasons.json` and `<dir>/<id>/history.json`. |
 | `--report-dir <dir>` | Also saves the JSON report, in either output mode, as `<dir>/model-evaluation-report-<id>-<YYYY-MM-DD>.json`, dated by the run's UTC start. A same-day run replaces it. |
-| `--tune-start <year>` | First tuning season, validated only; default `bayes_tune.tune_start`, then `elo_tune.tune_start`. |
-| `--tune-end <year>` | Last tuning season; the held-out seasons follow it. Default `bayes_tune.tune_end`, then `elo_tune.tune_end`. |
-| `--test-end <year>` | Last held-out season; default `bayes_tune.test_end`, then `elo_tune.test_end`. |
 | `--json` | Prints the full JSON report to stdout instead of the summary. |
 
-The split defaults and checks match [`bayes-tune`](bayesian-tuning.md), so both shipped leagues evaluate 2023–2025
-([Seasons](elo-tuning.md#seasons) lists the checks and their errors). When a held-out season lies within a configured
-tuning range, a note says that those seasons are not fully held out.
+The split and held-out seasons come from the file, so `simulate-season`'s split options choose them, and both shipped
+leagues evaluate 2023–2025 by default. When a held-out season lies within a configured tuning range, a note says that
+those seasons are not fully held out.
+
+| Error | Cause |
+| --- | --- |
+| `Read history.json; run import-history first` | The league has no history |
+| `Read simulated-seasons.json; run simulate-season first` | The league has no simulation |
+| `Parse simulated-seasons.json; rerun simulate-season` | The file isn't a simulation in a format this tool reads |
+| `Incompatible simulated-seasons.json; rerun simulate-season` | The file has another `schema_version` or league |
+| `simulated-seasons.json was generated from a different configuration; rerun simulate-season` | The configuration changed after the simulation |
+| `simulated-seasons.json was generated from a different history.json; rerun simulate-season` | The history changed after the simulation |
 
 Progress messages go to stderr in either mode. The tool only reads its inputs, so it takes no lock. The MLB run takes
-a few seconds in a release build.
+under a second in a release build.
 
 ## How the predictions are made
 
-For each held-out season, preseason Elo ratings and the tie weight ν are rebuilt from the earlier seasons only, as
+[`simulate-season`](season-simulation.md#how-the-seasons-are-simulated) makes the Bayesian and Elo predictions, and
+this tool adds the equal-strength baseline. For each held-out season, preseason Elo ratings and the tie weight ν are rebuilt from the earlier seasons only, as
 [`generate-preseason-seed`](preseason-seed.md) builds a seed, and every predictor starts from them. Games are then
 predicted one UTC date at a time from the results of earlier dates only:
 
@@ -56,8 +67,6 @@ predicted one UTC date at a time from the results of earlier dates only:
   tie term to the pregame Elo difference.
 - **Equal strength**: no home advantage, the non-tie probability split evenly, and the season's tie weight at equal
   strength, as in the [backtest](backtesting.md).
-
-[`simulate-season`](season-simulation.md) saves the same Bayesian and Elo predictions, game by game, to a file.
 
 ## Summary
 
@@ -92,9 +101,9 @@ The summary's layout is not a stable format; programs should pass `--json`.
 | --- | --- |
 | `run_at` | RFC 3339 UTC timestamp of the run's start |
 | `league` | League id |
-| `config_sha256`, `history_sha256` | SHA-256 of the configuration and history bytes the run read |
+| `config_sha256`, `history_sha256` | SHA-256 of the configuration and history bytes; the simulation and the run read the same bytes |
 | `method` | One-line description of the predictions |
-| `split` | `warmup_start`, `tune_start`, `tune_end`, `test_end` |
+| `split` | The simulation's `warmup_start`, `tune_start`, `tune_end`, `test_end` |
 | `holdout_seasons` | `[first, last]` held-out season |
 | `elo_settings`, `bayesian_settings` | The configuration's `elo` and `bayesian` blocks |
 | `tie_weights` | Each held-out season's `season` and `tie_weight` |

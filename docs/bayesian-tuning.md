@@ -126,5 +126,4 @@ Widen `tuning_grids.bayesian` past that boundary and rerun.
 
 To adopt the selection, copy `selected_parameters` into the configuration's `bayesian` block. The seed's tie weight
 depends on the tie smoothing, so rerun [`generate-preseason-seed`](preseason-seed.md) for every seed, then
-[`evaluate-model`](model-evaluation.md) to score the adopted settings and [`simulate-season`](season-simulation.md)
-if you use its file. Revising the search after reading the held-out scores makes them useless for evaluation.
+[`simulate-season`](season-simulation.md) and [`evaluate-model`](model-evaluation.md) to score the adopted settings. Revising the search after reading the held-out scores makes them useless for evaluation.

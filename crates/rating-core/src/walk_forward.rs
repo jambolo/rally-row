@@ -1,5 +1,5 @@
-//! Predicting a completed season one UTC date at a time from earlier information only, as Bayesian tuning, model
-//! evaluation, and the held-out season simulation do.
+//! Predicting a completed season one UTC date at a time from earlier information only, as Bayesian tuning and the
+//! held-out season simulation do.
 
 use crate::{
     EloSeed, Game, GameFile, LeagueConfig, apply_game,

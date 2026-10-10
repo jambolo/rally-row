@@ -325,6 +325,63 @@ pub struct SimulatedSeasons {
     pub seasons: Vec<walk_forward::SeasonPredictions>,
 }
 
+impl SimulatedSeasons {
+    /// Validates `split` and simulates seasons `split.tune_end + 1` through `split.test_end` with
+    /// `walk_forward::predict_season`, calling `progress` after each season.
+    pub fn simulate(
+        history: &GameFile,
+        history_bytes: &[u8],
+        cfg: &LeagueConfig,
+        config_bytes: &[u8],
+        split: tuning::Split,
+        mut progress: impl FnMut(&walk_forward::SeasonPredictions),
+    ) -> Result<Self> {
+        let generated_at = Utc::now().to_rfc3339();
+        tuning::validate(history, cfg, split)?;
+        let seasons = (split.tune_end + 1..=split.test_end)
+            .map(|season| {
+                let predicted = walk_forward::predict_season(history, cfg, season)?;
+                progress(&predicted);
+                Ok(predicted)
+            })
+            .collect::<Result<_>>()?;
+        Ok(Self {
+            schema_version: SIMULATED_SEASONS_SCHEMA_VERSION,
+            league: cfg.id.clone(),
+            generated_at,
+            history_sha256: digest(history_bytes),
+            config_sha256: digest(config_bytes),
+            split,
+            elo_settings: cfg.elo.clone(),
+            bayesian_settings: cfg.bayesian.clone(),
+            seasons,
+        })
+    }
+
+    /// Loads `<data_dir>/<league>/simulated-seasons.json` and requires it to be current: this schema, generated from
+    /// `config_bytes` and the current `<data_dir>/<league>/history.json`.
+    pub fn load(data_dir: &Path, cfg: &LeagueConfig, config_bytes: &[u8]) -> Result<Self> {
+        let dir = data_dir.join(&cfg.id);
+        let history_bytes = fs::read(dir.join("history.json")).context("Read history.json; run import-history first")?;
+        let bytes =
+            fs::read(dir.join("simulated-seasons.json")).context("Read simulated-seasons.json; run simulate-season first")?;
+        let file: Self = serde_json::from_slice(&bytes).context("Parse simulated-seasons.json; rerun simulate-season")?;
+        ensure!(
+            file.schema_version == SIMULATED_SEASONS_SCHEMA_VERSION && file.league == cfg.id,
+            "Incompatible simulated-seasons.json; rerun simulate-season"
+        );
+        ensure!(
+            file.config_sha256 == digest(config_bytes),
+            "simulated-seasons.json was generated from a different configuration; rerun simulate-season"
+        );
+        ensure!(
+            file.history_sha256 == digest(&history_bytes),
+            "simulated-seasons.json was generated from a different history.json; rerun simulate-season"
+        );
+        Ok(file)
+    }
+}
+
 pub fn digest(bytes: &[u8]) -> String {
     // sha2 0.11 returns a hybrid_array::Array, which no longer implements LowerHex.
     let mut hex = String::with_capacity(64);

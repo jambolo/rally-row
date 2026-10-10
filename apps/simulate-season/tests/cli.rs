@@ -57,9 +57,8 @@ fn cli_saves_every_heldout_game_predicted_from_earlier_dates_and_leaves_inputs_u
     let file: SimulatedSeasons = serde_json::from_value(saved.clone()).unwrap();
     assert_eq!(file.seasons.iter().map(|s| s.season).collect::<Vec<_>>(), [2005, 2006]);
     for (i, season) in file.seasons.iter().enumerate() {
-        // Both sides are parsed from JSON text, because serde_json's default float parsing may differ in the last bit.
-        let expected = serde_json::to_string(&predict_season(&history, &cfg, season.season).unwrap()).unwrap();
-        assert_eq!(saved["seasons"][i], serde_json::from_str::<Value>(&expected).unwrap());
+        let expected = predict_season(&history, &cfg, season.season).unwrap();
+        assert_eq!(saved["seasons"][i], serde_json::to_value(&expected).unwrap());
         let games: Vec<_> = season.games.iter().map(|p| &p.game).collect();
         let expected: Vec<_> = history.games.iter().filter(|g| g.season == season.season).collect();
         assert_eq!(games, expected);

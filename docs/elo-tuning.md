@@ -44,8 +44,9 @@ The split divides the history into three ranges:
 | Held-out | `tune_end + 1` through `test_end` | 2023–2025 | 2023–2025 |
 
 Each option overrides one boundary of the configuration's `elo_tune` split. Without `elo_tune`, all three options
-are required. [`bayes-tune`](bayesian-tuning.md), [`evaluate-model`](model-evaluation.md), and
-[`simulate-season`](season-simulation.md) take the same options and run the same checks, but read `bayes_tune` first.
+are required. [`bayes-tune`](bayesian-tuning.md) and [`simulate-season`](season-simulation.md) take the same options
+and run the same checks, but read `bayes_tune` first. [`evaluate-model`](model-evaluation.md) scores the seasons that
+`simulate-season` holds out.
 
 | Error | Cause |
 | --- | --- |
@@ -139,7 +140,7 @@ Widen `tuning_grids.elo` past that boundary and rerun. A note also reports when 
 edge after four expansions.
 
 To adopt the selection, copy `selected_parameters` into the configuration's `elo` block, then rerun
-[`generate-preseason-seed`](preseason-seed.md) for every seed and [`simulate-season`](season-simulation.md) if you use
-its file.
+[`generate-preseason-seed`](preseason-seed.md) for every seed and [`simulate-season`](season-simulation.md), whose file
+[`evaluate-model`](model-evaluation.md) scores.
 [`bayes-tune`](bayesian-tuning.md) keeps the configured Elo settings fixed, so tune Elo before the Bayesian settings.
 Revising the search after reading the held-out scores makes them useless for evaluation.

@@ -5,7 +5,8 @@ would have predicted it. It runs the app's own TypeScript source adapter and mod
 implementation rather than the Rust one. It compares the model's predictions with an equal-strength baseline and
 prints a JSON summary.
 
-Unlike [`evaluate-model`](model-evaluation.md), which scores held-out seasons offline from the saved history, the
+Unlike [`evaluate-model`](model-evaluation.md), which scores held-out seasons offline from the predictions
+[`simulate-season`](season-simulation.md) makes from the saved history, the
 backtest downloads the evaluated season from the provider, so it needs network access and can score the current
 season's completed games.
 

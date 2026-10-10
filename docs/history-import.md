@@ -2,8 +2,9 @@
 
 `import-history` downloads a league's completed historical seasons through its source adapter and saves them to
 `data/<id>/history.json`. Every other command-line tool reads that file:
-[`generate-preseason-seed`](preseason-seed.md) builds preseason seeds from it, and the tuners,
-[`evaluate-model`](model-evaluation.md), and [`simulate-season`](season-simulation.md) replay it. The importer never writes current-season data; the browser
+[`generate-preseason-seed`](preseason-seed.md) builds preseason seeds from it, the tuners and
+[`simulate-season`](season-simulation.md) replay it, and [`evaluate-model`](model-evaluation.md) checks the
+simulation against it. The importer never writes current-season data; the browser
 downloads the current season itself.
 
 ## Running the tool
@@ -95,5 +96,5 @@ and ask you to rerun the importer.
 
 Rerun the importer when a new season completes and after any change to franchise identities, aliases, or divisions.
 Then rerun [`generate-preseason-seed`](preseason-seed.md), whose seed records the history's hash, and
-[`simulate-season`](season-simulation.md) if you use its file. The Pages workflow imports every league's history
+[`simulate-season`](season-simulation.md), whose file [`evaluate-model`](model-evaluation.md) scores. The Pages workflow imports every league's history
 before each build.
