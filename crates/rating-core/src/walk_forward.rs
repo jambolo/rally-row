@@ -2,11 +2,11 @@
 //! held-out season simulation do.
 
 use crate::{
-    EloSeed, Game, GameFile, HISTORY_SCHEMA_VERSION, LeagueConfig, apply_game,
+    EloSeed, Game, GameFile, LeagueConfig, apply_game,
     bayesian::{Posterior, Probabilities, TieHistory, fit_posterior, outcome_probabilities},
     chronological, expected_home, replay_seeds,
 };
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, collections::BTreeMap, ops::RangeInclusive};
 
@@ -24,29 +24,22 @@ pub struct Preseason {
 /// `generate-preseason-seed`, and collects the season's games in start order. One replay of the history serves every
 /// season.
 pub fn preseasons(history: &GameFile, cfg: &LeagueConfig, seasons: RangeInclusive<i32>) -> Result<Vec<Preseason>> {
-    ensure!(
-        history.schema_version == HISTORY_SCHEMA_VERSION
-            && history.league == cfg.id
-            && history.teams_sha256 == cfg.teams_sha256()
-            && history.from_season == cfg.history_start,
-        "History schema, league, franchise identities, or first season do not match configuration; rerun import-history"
-    );
-    let mut prepared = Vec::new();
-    replay_seeds(&history.games, b"", cfg, b"", seasons, |seed, ties| {
-        let mut games: Vec<_> = history
-            .games
-            .iter()
-            .filter(|g| g.season == seed.target_season)
-            .cloned()
-            .collect();
-        games.sort_by(chronological);
-        prepared.push(Preseason {
-            seed,
-            ties: ties.clone(),
-            games,
-        });
-    })?;
-    Ok(prepared)
+    history.ensure_current(cfg)?;
+    let mut by_season: BTreeMap<i32, Vec<Game>> = seasons.clone().map(|season| (season, Vec::new())).collect();
+    for g in &history.games {
+        if let Some(games) = by_season.get_mut(&g.season) {
+            games.push(g.clone());
+        }
+    }
+    let seeds = replay_seeds(&history.games, b"", cfg, b"", seasons)?;
+    Ok(seeds
+        .into_iter()
+        .zip(by_season.into_values())
+        .map(|((seed, ties), mut games)| {
+            games.sort_by(chronological);
+            Preseason { seed, ties, games }
+        })
+        .collect())
 }
 
 /// Walks start-ordered `games` one UTC date at a time. Each item pairs a posterior fit to the earlier dates only

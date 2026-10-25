@@ -249,8 +249,10 @@ export const gameFileSchema = z.object({
   games: z.array(gameSchema),
 });
 export type GameFile = z.infer<typeof gameFileSchema>;
+/** Equals `SEED_SCHEMA_VERSION` in `crates/rating-core/src/lib.rs`; both test suites check it against the parity fixture. */
+export const SEED_SCHEMA_VERSION = 2;
 export const seedSchema = z.object({
-  schema_version: z.literal(2),
+  schema_version: z.literal(SEED_SCHEMA_VERSION),
   league: z.string(),
   target_season: z.number().int(),
   through_season: z.number().int(),

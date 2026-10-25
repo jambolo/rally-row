@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use chrono::{DateTime, Datelike, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -21,7 +21,7 @@ mod time;
 pub mod tuning;
 pub mod walk_forward;
 pub use adapters::{SourceAdapter, adapter_for};
-pub use elo::{EloReplay, apply_game, expected_home, regress_rating, replay_elo};
+pub use elo::{EloReplay, Update, apply_game, expected_home, regress_rating, replay_elo};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Source {
@@ -247,7 +247,7 @@ pub struct Game {
     pub neutral: bool,
     pub result: Option<Outcome>,
 }
-pub const HISTORY_SCHEMA_VERSION: u32 = 4;
+pub const HISTORY_SCHEMA_VERSION: u32 = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameFile {
@@ -257,9 +257,52 @@ pub struct GameFile {
     pub source_url: String,
     pub from_season: i32,
     pub through_season: i32,
+    /// `SourceAdapter::version` of the adapter that parsed the games.
+    pub adapter_version: u32,
     /// `LeagueConfig::teams_sha256` of the configuration the games were imported with.
     pub teams_sha256: String,
     pub games: Vec<Game>,
+}
+
+impl GameFile {
+    /// Why the games may no longer match what an import with `cfg` would produce, or `None` when the file is current: it
+    /// has this schema and was imported for `cfg`'s league, source, adapter version, franchise registry, and historical
+    /// start.
+    pub fn stale_reason(&self, cfg: &LeagueConfig) -> Option<String> {
+        let adapter_version = adapter_for(&cfg.source.kind).map(|a| a.version()).ok();
+        if self.schema_version != HISTORY_SCHEMA_VERSION {
+            Some(format!(
+                "history.json has schema version {}, not {HISTORY_SCHEMA_VERSION}",
+                self.schema_version
+            ))
+        } else if self.league != cfg.id {
+            Some(format!("history.json is for league {}, not {}", self.league, cfg.id))
+        } else if self.source_url != cfg.source.url {
+            Some("The configured source URL changed after history.json was imported".to_owned())
+        } else if Some(self.adapter_version) != adapter_version {
+            Some(format!(
+                "The {} adapter changed after history.json was imported",
+                cfg.source.kind
+            ))
+        } else if self.teams_sha256 != cfg.teams_sha256() {
+            Some("Team identity history changed after history.json was imported".to_owned())
+        } else if self.from_season != cfg.history_start {
+            Some(format!(
+                "history.json starts in {}, not history_start {}",
+                self.from_season, cfg.history_start
+            ))
+        } else {
+            None
+        }
+    }
+
+    /// Requires the file to be current for `cfg` (see `stale_reason`).
+    pub fn ensure_current(&self, cfg: &LeagueConfig) -> Result<()> {
+        match self.stale_reason(cfg) {
+            Some(reason) => bail!("{reason}; rerun import-history"),
+            None => Ok(()),
+        }
+    }
 }
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Rating {
@@ -278,6 +321,10 @@ pub struct Audit {
     pub home_after: f64,
     pub away_after: f64,
 }
+/// Equals `SEED_SCHEMA_VERSION` in `apps/web/src/contracts.ts`; both test suites check it against the seed in
+/// `tests/fixtures/bayesian-parity.json`.
+pub const SEED_SCHEMA_VERSION: u32 = 2;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EloSeed {
     pub schema_version: u32,
@@ -366,7 +413,6 @@ impl SimulatedSeasons {
         })
     }
 
-    /// Writes the file to `path`.
     pub fn save(&self, path: &Path) -> Result<()> {
         write_json(path, &self.map_games(|p| Ok(walk_forward::SavedGame::from(p)))?)
     }
@@ -877,6 +923,8 @@ pub fn fetch_source(url: &str) -> Result<String> {
             .and_then(|r| r.text())
         {
             Ok(body) => return Ok(body),
+            // A request that can't be built, such as one for an unparsable URL, fails the same way every time.
+            Err(error) if error.is_builder() => return Err(error).with_context(|| format!("Download {url}")),
             Err(error) => {
                 last = Some(error);
                 if attempt < 2 {
@@ -885,7 +933,7 @@ pub fn fetch_source(url: &str) -> Result<String> {
             }
         }
     }
-    Err(last.unwrap().into())
+    Err(last.unwrap()).with_context(|| format!("Download {url}"))
 }
 
 pub fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
@@ -932,16 +980,9 @@ pub fn build_seed(
     target: i32,
 ) -> Result<EloSeed> {
     cfg.validate()?;
+    history.ensure_current(cfg)?;
     ensure!(
-        history.teams_sha256 == cfg.teams_sha256(),
-        "Team identity history changed; rerun import-history before generate-preseason-seed"
-    );
-    ensure!(
-        history.schema_version == HISTORY_SCHEMA_VERSION && history.league == cfg.id,
-        "Incompatible history file; rerun import-history"
-    );
-    ensure!(
-        history.from_season == cfg.history_start && history.through_season == target - 1,
+        history.through_season == target - 1,
         "History must cover {} through {}. Run import-history first.",
         cfg.history_start,
         target - 1
@@ -953,31 +994,34 @@ pub fn build_seed(
             .all(|g| g.season >= cfg.history_start && g.season < target),
         "History contains a game outside its declared training period"
     );
-    let mut seed = None;
-    replay_seeds(&history.games, history_bytes, cfg, config_bytes, target..=target, |s, _| {
-        seed = Some(s)
-    })?;
-    Ok(seed.expect("one target season"))
+    let (seed, _) = replay_seeds(&history.games, history_bytes, cfg, config_bytes, target..=target)?
+        .pop()
+        .context("No target season")?;
+    Ok(seed)
 }
 
-/// Replays `games` once, through the season before the last of `seasons`, and passes `preseason` each season's seed with
-/// the tie history that set its tie weight, both from the seasons before it only.
+/// Replays `games` once, through the season before the last of `seasons`, and returns each season's seed with the tie
+/// history that set its tie weight, both from the seasons before it only.
 pub(crate) fn replay_seeds(
     games: &[Game],
     history_bytes: &[u8],
     cfg: &LeagueConfig,
     config_bytes: &[u8],
     seasons: RangeInclusive<i32>,
-    mut preseason: impl FnMut(EloSeed, &bayesian::TieHistory),
-) -> Result<()> {
+) -> Result<Vec<(EloSeed, bayesian::TieHistory)>> {
+    ensure!(
+        cfg.history_start < *seasons.start(),
+        "The first target season must follow history_start {}",
+        cfg.history_start
+    );
     let games = elo::replay_games(games, cfg, seasons.end() - 1)?;
-    ensure!(cfg.history_start < *seasons.start(), "Invalid Elo replay end season");
     let generated_at = Utc::now().to_rfc3339();
     let (history_sha256, config_sha256) = (digest(history_bytes), digest(config_bytes));
     let mut elo = elo::Elo::new(cfg);
     let mut ties = bayesian::TieHistory::default();
     let mut completed_games = 0;
     let mut completed = games.iter().filter(|g| g.result.is_some()).peekable();
+    let mut seeds = Vec::new();
     for target in seasons {
         while let Some(g) = completed.next_if(|g| g.season < target) {
             ties.add(g, &elo.apply(g)?, cfg);
@@ -989,7 +1033,7 @@ pub(crate) fn replay_seeds(
             r.elo = regress_rating(r.elo, &cfg.elo);
         }
         let seed = EloSeed {
-            schema_version: 2,
+            schema_version: SEED_SCHEMA_VERSION,
             league: cfg.id.clone(),
             target_season: target,
             through_season: target - 1,
@@ -1001,9 +1045,9 @@ pub(crate) fn replay_seeds(
             tie_weight: ties.estimate(&cfg.bayesian),
             ratings,
         };
-        preseason(seed, &ties);
+        seeds.push((seed, ties.clone()));
     }
-    Ok(())
+    Ok(seeds)
 }
 
 #[cfg(test)]

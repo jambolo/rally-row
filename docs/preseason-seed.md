@@ -37,8 +37,7 @@ runs from writing the same league at once.
 | --- | --- |
 | `Read history.json; run import-history first` | No history file |
 | `History must cover <first> through <last>. Run import-history first.` | The history doesn't end with the season before the target season |
-| `Team identity history changed; rerun import-history before generate-preseason-seed` | The configuration's `teams` changed after the import |
-| `Incompatible history file; rerun import-history` | The history's schema version or league doesn't match |
+| `<reason>; rerun import-history` | The history isn't current: its schema version, league, source URL, adapter version, `history_start`, or franchise registry (`Team identity history changed after history.json was imported`) doesn't match ([History import](history-import.md#output)) |
 
 ## How the seed is built
 
@@ -85,5 +84,6 @@ The browser loads the current season's seed for the selected league. It rejects 
 
 The hash covers the whole configuration file, so rerun
 `generate-preseason-seed` after any configuration change, not only a change to `elo` or `bayesian`, and after every
-import. The Pages workflow regenerates every league's history and seed before each build, and its scheduled run
-publishes each league's new-season seed in its rollover month.
+import. The Pages workflow regenerates every league's history and seed before each build, and its weekly scheduled
+check builds the site while any league's current-season seed is missing, so each new-season seed is published after the
+league's rollover and a failed build is retried.

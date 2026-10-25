@@ -1,5 +1,5 @@
 //! Bradley–Terry–Davidson likelihood and Laplace approximation, matching apps/web/src/model.ts.
-use crate::{Audit, BayesianSettings, EloSeed, Game, LeagueConfig, Outcome};
+use crate::{BayesianSettings, EloSeed, Game, LeagueConfig, Outcome, Update};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -11,11 +11,11 @@ pub struct TieHistory {
 }
 
 impl TieHistory {
-    /// Adds a replayed `game` with its replay `entry`; only phases that allow ties count.
-    pub(crate) fn add(&mut self, game: &Game, entry: &Audit, cfg: &LeagueConfig) {
+    /// Adds a replayed `game` with its rating `update`; only phases that allow ties count.
+    pub(crate) fn add(&mut self, game: &Game, update: &Update, cfg: &LeagueConfig) {
         if cfg.ties_allowed_in.contains(&game.phase) {
             let advantage = if game.neutral { 0.0 } else { cfg.elo.home_advantage };
-            let difference = std::f64::consts::LN_10 * (entry.home_before - entry.away_before + advantage) / cfg.elo.scale;
+            let difference = std::f64::consts::LN_10 * (update.home_before - update.away_before + advantage) / cfg.elo.scale;
             self.denominators.push(2.0 * (difference / 2.0).cosh());
             self.tied_games += usize::from(game.result == Some(Outcome::Tie));
         }

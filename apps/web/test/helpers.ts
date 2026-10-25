@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { configSchema, type EloSeed, type Game } from '../src/contracts.ts';
+import { configSchema, SEED_SCHEMA_VERSION, type EloSeed, type Game } from '../src/contracts.ts';
 import { digest } from '../src/storage.ts';
 
 export const configBytes = readFileSync(new URL('../../../config/nfl.json', import.meta.url));
@@ -13,7 +13,7 @@ export const historyHashFile = `${historyHash}
 
 export function seed(): EloSeed {
   return {
-    schema_version: 2,
+    schema_version: SEED_SCHEMA_VERSION,
     league: 'nfl',
     target_season: 2026,
     through_season: 2025,

@@ -15,25 +15,47 @@ pub fn regress_rating(rating: f64, cfg: &EloSettings) -> f64 {
     cfg.initial + (rating - cfg.initial) * (1.0 - cfg.offseason_regression)
 }
 
+/// One game's rating update: the pregame ratings, the expected and observed home scores, and the home team's change.
+#[derive(Debug, Clone, Copy)]
+pub struct Update {
+    pub home_before: f64,
+    pub away_before: f64,
+    pub expected_home_score: f64,
+    pub observed_home_score: f64,
+    pub delta: f64,
+}
+
+impl Update {
+    pub fn audit(&self, game: &Game) -> Audit {
+        Audit {
+            game_id: game.id.clone(),
+            season: game.season,
+            home_before: self.home_before,
+            away_before: self.away_before,
+            expected_home_score: self.expected_home_score,
+            observed_home_score: self.observed_home_score,
+            home_after: self.home_before + self.delta,
+            away_after: self.away_before - self.delta,
+        }
+    }
+}
+
 /// Scores a completed game with the pregame ratings, then moves both ratings by K times the observed surprise.
-pub fn apply_game(ratings: &mut BTreeMap<String, f64>, game: &Game, cfg: &EloSettings) -> Result<Audit> {
+pub fn apply_game(ratings: &mut BTreeMap<String, f64>, game: &Game, cfg: &EloSettings) -> Result<Update> {
     let outcome = game.result.as_ref().context("Cannot score an unreported game")?;
     let home = ratings[&game.home_team];
     let away = ratings[&game.away_team];
     let expected = expected_home(home, away, game.neutral, cfg);
     let observed = outcome.home_score();
     let delta = cfg.k * (observed - expected);
-    ratings.insert(game.home_team.clone(), home + delta);
-    ratings.insert(game.away_team.clone(), away - delta);
-    Ok(Audit {
-        game_id: game.id.clone(),
-        season: game.season,
+    *ratings.get_mut(&game.home_team).unwrap() = home + delta;
+    *ratings.get_mut(&game.away_team).unwrap() = away - delta;
+    Ok(Update {
         home_before: home,
         away_before: away,
         expected_home_score: expected,
         observed_home_score: observed,
-        home_after: home + delta,
-        away_after: away - delta,
+        delta,
     })
 }
 
@@ -58,17 +80,17 @@ impl<'a> Elo<'a> {
     }
 
     /// Regresses once for each season boundary since the previous game, then applies the completed `game`.
-    pub(crate) fn apply(&mut self, game: &Game) -> Result<Audit> {
+    pub(crate) fn apply(&mut self, game: &Game) -> Result<Update> {
         while self.season < game.season {
             for r in self.ratings.values_mut() {
                 *r = regress_rating(*r, self.settings);
             }
             self.season += 1;
         }
-        let audit = apply_game(&mut self.ratings, game, self.settings)?;
+        let update = apply_game(&mut self.ratings, game, self.settings)?;
         *self.counts.get_mut(&game.home_team).unwrap() += 1;
         *self.counts.get_mut(&game.away_team).unwrap() += 1;
-        Ok(audit)
+        Ok(update)
     }
 
     /// The ratings after the latest game, without the offseason regression that follows it.
@@ -91,7 +113,7 @@ pub fn replay_elo(games: &[Game], cfg: &LeagueConfig, through_season: i32) -> Re
     let audit = games
         .iter()
         .filter(|g| g.result.is_some())
-        .map(|g| elo.apply(g))
+        .map(|g| Ok(elo.apply(g)?.audit(g)))
         .collect::<Result<_>>()?;
     Ok(EloReplay {
         ratings: elo.ratings(),

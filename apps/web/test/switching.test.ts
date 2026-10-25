@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { configSchema, type EloSeed } from '../src/contracts.ts';
+import { configSchema, SEED_SCHEMA_VERSION, type EloSeed } from '../src/contracts.ts';
 import { indexedDbPersistence } from '../src/persistence.ts';
 import * as postseason from '../src/postseason.ts';
 import { refresh, type RefreshMessage, type RefreshRequest } from '../src/refresh-worker.ts';
@@ -30,7 +30,7 @@ const mlbConfigBytes = readFileSync(new URL('../../../config/mlb.json', import.m
 const mlbConfig = configSchema.parse(JSON.parse(mlbConfigBytes.toString()));
 const mlbHistoryHash = await digest('mlb history');
 const mlbSeed: EloSeed = {
-  schema_version: 2,
+  schema_version: SEED_SCHEMA_VERSION,
   league: 'mlb',
   target_season: 2026,
   through_season: 2025,

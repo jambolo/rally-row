@@ -1,5 +1,5 @@
 use rating_core::{
-    EloSeed, Game, LeagueConfig, Outcome,
+    EloSeed, Game, LeagueConfig, Outcome, SEED_SCHEMA_VERSION,
     bayesian::{fit_posterior, outcome_probabilities},
 };
 use serde::Deserialize;
@@ -29,6 +29,7 @@ fn close(a: f64, b: f64) {
 #[test]
 fn matches_browser_means_full_covariance_and_integrated_probabilities() {
     let f = fixture();
+    assert_eq!(f.seed.schema_version, SEED_SCHEMA_VERSION);
     for case in f.cases {
         let model = fit_posterior(&f.seed, &f.games[..case.training_count], &f.config).unwrap();
         for (&a, b) in model.means.iter().zip(case.means) {

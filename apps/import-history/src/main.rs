@@ -1,11 +1,11 @@
 use anyhow::{Context, Result, bail, ensure};
 use clap::Parser;
 use rating_core::{
-    GameFile, HISTORY_SCHEMA_VERSION, LeagueConfig, adapter_for, fetch_source, load_history, load_league_config, lock,
-    parse_documents, validate_games, write_json,
+    GameFile, HISTORY_SCHEMA_VERSION, LeagueConfig, adapter_for, fetch_source, load_league_config, lock, parse_documents,
+    validate_games, write_json,
 };
 use std::{
-    fs,
+    fs, io,
     path::{Path, PathBuf},
 };
 
@@ -30,17 +30,23 @@ struct Args {
     refresh: bool,
 }
 
-/// The saved history when its seasons can be kept: it is current for `cfg`, its games still validate, and it ends no
-/// later than `through`.
-fn reusable(data_dir: &Path, cfg: &LeagueConfig, through: i32) -> Option<GameFile> {
-    let (mut history, _) = load_history(data_dir, cfg).ok()?;
-    let current = history.schema_version == HISTORY_SCHEMA_VERSION
-        && history.league == cfg.id
-        && history.source_url == cfg.source.url
-        && history.teams_sha256 == cfg.teams_sha256()
-        && history.from_season == cfg.history_start
-        && history.through_season <= through;
-    (current && validate_games(&mut history.games, cfg).is_ok()).then_some(history)
+/// The saved history at `path` when its seasons can be kept: it is current for `cfg`, its games still validate, and it
+/// ends no later than `through`. `Ok(None)` when there is no saved history, and `Err` with the reason when it can't be kept.
+fn reusable(path: &Path, cfg: &LeagueConfig, through: i32) -> Result<Option<GameFile>, String> {
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("Read failed: {e}")),
+    };
+    let mut history: GameFile = serde_json::from_slice(&bytes).map_err(|e| format!("Parse failed: {e}"))?;
+    if let Some(reason) = history.stale_reason(cfg) {
+        return Err(reason);
+    }
+    if history.through_season > through {
+        return Err(format!("It holds seasons after {through}"));
+    }
+    validate_games(&mut history.games, cfg).map_err(|e| format!("Its games no longer validate: {e:#}"))?;
+    Ok(Some(history))
 }
 
 fn main() -> Result<()> {
@@ -56,9 +62,14 @@ fn main() -> Result<()> {
     let path = dir.join("history.json");
     let adapter = adapter_for(&cfg.source.kind)?;
     // Completed seasons rarely change, so a download skips the seasons the saved file already holds.
-    let saved = (args.input.is_empty() && !args.refresh)
-        .then(|| reusable(&args.data_dir, &cfg, through))
-        .flatten();
+    let saved = if args.input.is_empty() && !args.refresh {
+        reusable(&path, &cfg, through).unwrap_or_else(|reason| {
+            eprintln!("Downloading every season; can't keep {}: {reason}", path.display());
+            None
+        })
+    } else {
+        None
+    };
     let first = saved.as_ref().map_or(cfg.history_start, |h| h.through_season + 1);
     if first > through {
         println!(
@@ -111,6 +122,7 @@ fn main() -> Result<()> {
         source_url: cfg.source.url.clone(),
         from_season: cfg.history_start,
         through_season: through,
+        adapter_version: adapter.version(),
         teams_sha256: cfg.teams_sha256(),
         games,
     };

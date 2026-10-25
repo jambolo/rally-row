@@ -1,3 +1,4 @@
+use rating_core::HISTORY_SCHEMA_VERSION;
 use serde_json::{Value, json};
 use std::{fs, path::Path, process::Command};
 use test_support::{
@@ -57,7 +58,7 @@ fn importer_warns_writes_utc_and_keeps_existing_history_on_missing_date() {
     let history_path = dir.path().join("nfl/history.json");
     let saved = fs::read(&history_path).unwrap();
     let history: Value = serde_json::from_slice(&saved).unwrap();
-    assert_eq!(history["schema_version"], 4);
+    assert_eq!(history["schema_version"], HISTORY_SCHEMA_VERSION);
     for game in history["games"].as_array().unwrap() {
         assert_eq!(game["round"], 1);
         assert_eq!(game["round_label"], "REG");
@@ -124,11 +125,14 @@ fn envelope(games: &[(&str, i32, &str)]) -> String {
     json!({"schema_version": 2, "league": "nfl", "games": games}).to_string()
 }
 
+/// An unparsable source URL, so every download fails at once, before making a request, and is not retried.
+const OFFLINE_URL: &str = "https://[";
+
 /// Writes a canonical-json NFL config to `dir` and imports season 2002 from a saved file; returns the config and the
-/// saved history's bytes. The source URL can't be parsed, so every download fails before making a request.
+/// saved history's bytes. Downloads from the configured source fail.
 fn offline_history(dir: &Path) -> (Value, Vec<u8>) {
     let mut cfg = league_config_json("nfl");
-    cfg["source"] = json!({"kind": "canonical-json", "url": "https://["});
+    cfg["source"] = json!({"kind": "canonical-json", "url": OFFLINE_URL});
     fs::write(dir.join("nfl.json"), cfg.to_string()).unwrap();
     let source = dir.join("source.json");
     fs::write(&source, envelope(&[("a", 2002, "home_win")])).unwrap();
@@ -155,28 +159,44 @@ fn importer_keeps_a_current_history_and_downloads_only_later_seasons() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_contains(&stderr, "Keeping seasons 2002–2002 from ");
     assert_contains(&stderr, "downloading 2003–2003");
-    assert_contains(&stderr, "builder error");
+    assert_contains(&stderr, &format!("Download {OFFLINE_URL}"));
     assert_eq!(fs::read(&history_path).unwrap(), saved);
 }
 
 #[test]
-fn importer_downloads_every_season_when_refreshing_or_after_an_identity_change() {
+fn importer_downloads_every_season_when_refreshing_or_after_an_identity_or_adapter_change() {
     let dir = tempfile::tempdir().unwrap();
     let (mut cfg, saved) = offline_history(dir.path());
+    let history_path = dir.path().join("nfl/history.json");
+    // Returns stderr of a failed import that downloaded every season and left the saved history in place.
     let downloads_everything = |args: &[&str]| {
         let output = importer(dir.path(), "nfl", "2002").args(args).output().unwrap();
         assert!(!output.status.success());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert_contains(&stderr, "builder error");
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        assert_contains(&stderr, &format!("Download {OFFLINE_URL}"));
         assert!(!stderr.contains("Keeping seasons"), "{stderr}");
-        assert_eq!(fs::read(dir.path().join("nfl/history.json")).unwrap(), saved);
+        stderr
     };
-    downloads_everything(&["--refresh"]);
+    assert!(!downloads_everything(&["--refresh"]).contains("Downloading every season"));
+    assert_eq!(fs::read(&history_path).unwrap(), saved);
+
+    let mut history: Value = serde_json::from_slice(&saved).unwrap();
+    history["adapter_version"] = json!(0);
+    fs::write(&history_path, history.to_string()).unwrap();
+    let stderr = downloads_everything(&[]);
+    assert_contains(&stderr, "Downloading every season; can't keep");
+    assert_contains(&stderr, "The canonical-json adapter changed after history.json was imported");
+    fs::write(&history_path, &saved).unwrap();
+
     let team = &mut cfg["teams"][0];
     team["name"] = json!("Renamed");
     team["eras"].as_array_mut().unwrap().last_mut().unwrap()["name"] = json!("Renamed");
     fs::write(dir.path().join("nfl.json"), cfg.to_string()).unwrap();
-    downloads_everything(&[]);
+    assert_contains(
+        &downloads_everything(&[]),
+        "Team identity history changed after history.json was imported",
+    );
+    assert_eq!(fs::read(&history_path).unwrap(), saved);
 }
 
 #[test]

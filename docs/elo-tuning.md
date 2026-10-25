@@ -53,7 +53,7 @@ and run the same checks, but read `bayes_tune` first. [`evaluate-model`](model-e
 | `Set elo_tune.tune_start in the config or pass --tune-start` | A boundary has neither a configured default nor an option; likewise for the others |
 | `Require warm-up history, at least two tuning seasons, and later completed held-out seasons` | The seasons are not ordered `history_start < tune_start < tune_end < test_end < current season` |
 | `History must cover <first> through <last>; rerun import-history with --through-season <last>` | The history ends before `test_end` |
-| `History schema, league, or franchise identities do not match configuration; rerun import-history` | The history is stale or for another league |
+| `<reason>; rerun import-history` | The history isn't current: its schema version, league, source URL, adapter version, `history_start`, or franchise registry doesn't match ([History import](history-import.md#output)) |
 | `Evaluation history contains an unreported game; use completed historical seasons` | A game through `test_end` has no result |
 | `Season <year> has <reason>; refresh history before tuning` | A season lacks the league's completion marker |
 

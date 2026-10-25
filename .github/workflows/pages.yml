@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   schedule:
     # Rebuild after each league's season rollover (season_rollover_month) so its new-season Elo seed gets published.
-    # The scheduled job limits this to the first Tuesday of a rollover month at 09:17 UTC.
+    # The scheduled job checks every Tuesday at 09:17 UTC and builds only while a current-season seed is missing.
     - cron: '17 9 * * 2'
 
 concurrency:
@@ -27,16 +27,32 @@ jobs:
     permissions:
       actions: write
       contents: read
+      pages: read
     steps:
+      # Cron runs on the default branch; read master's configuration, which the dispatched build uses.
       - uses: actions/checkout@v7
-      # Cron runs on the default branch; dispatch so deployment runs on master. Only a rollover changes a published seed,
-      # so other months skip the build and its history downloads.
-      - name: Dispatch on the first Tuesday of a rollover month
+        with:
+          ref: master
+      # Only a rollover changes a published seed, so the build and its history downloads run only while some league's
+      # current-season seed is missing from the site. A failed build is retried the next week.
+      - name: Dispatch while a current-season seed is unpublished
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$(date -u +%d)" -le 7 ] &&
-            jq -e --argjson month "$(date -u +%-m)" 'select(.season_rollover_month == $month)' config/*.json > /dev/null; then
+          site=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .html_url)
+          year=$(date -u +%Y)
+          month=$(date -u +%-m)
+          missing=
+          for config in config/*.json; do
+            league=$(jq -r .id "$config")
+            season=$(jq --argjson year "$year" --argjson month "$month" \
+              'if $month < .season_rollover_month then $year - 1 else $year end' "$config")
+            if ! curl -fsI -o /dev/null "${site%/}/data/$league/elo-$season.json"; then
+              echo "No published $league seed for $season"
+              missing=1
+            fi
+          done
+          if [ -n "$missing" ]; then
             gh workflow run pages.yml --ref master --repo "$GITHUB_REPOSITORY"
           fi
 

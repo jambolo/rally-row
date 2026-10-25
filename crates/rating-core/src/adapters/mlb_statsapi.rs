@@ -179,6 +179,9 @@ impl SourceAdapter for MlbStatsApi {
     fn kind(&self) -> &'static str {
         "mlb-statsapi"
     }
+    fn version(&self) -> u32 {
+        1
+    }
     fn history_urls(&self, cfg: &LeagueConfig, from_season: i32, through_season: i32) -> Vec<String> {
         (from_season..=through_season)
             .map(|season| cfg.source.url.replace("{season}", &season.to_string()))

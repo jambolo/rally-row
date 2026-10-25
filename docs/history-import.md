@@ -46,14 +46,17 @@ importer downloads nothing, leaves the file unchanged, and prints
 ## What the import does
 
 1. Keeps the seasons of the saved `history.json` when it is current and doesn't go past `--through-season`. It is
-   current when it has this schema, league, source URL, `history_start` and franchise registry, and its games still
-   pass the checks in step 4 under the configuration. The importer prints
-   `Keeping seasons <first>–<last> from <path>; downloading <first>–<last>` to stderr. `--input` and `--refresh`
-   skip this step.
+   current when it has this schema, league, source URL, adapter version, `history_start` and franchise registry, and
+   its games still pass the checks in step 4 under the configuration. The importer prints
+   `Keeping seasons <first>–<last> from <path>; downloading <first>–<last>` to stderr. When a saved file exists but
+   can't be kept, it prints `Downloading every season; can't keep <path>: <reason>` instead, with the reason, such as
+   `Team identity history changed after history.json was imported`, or a read or parse failure. `--input` and
+   `--refresh` skip this step.
 2. Downloads the documents the league's adapter names for the seasons it didn't keep, through `--through-season`:
    one nflverse games CSV for every season (NFL) or one Stats API schedule per season (MLB). The NFL CSV covers every
    season, so it is downloaded in full whenever any season is missing. Each request times out after 60 seconds and
-   is tried up to three times.
+   is tried up to three times, unless the request can't be built, such as for an unparsable URL. A failed download
+   reports `Download <url>` with the cause.
 3. Parses them with the league's [source adapter](extending.md#source-adapters), which maps provider team ids to
    franchises through the configured `aliases` and eras, derives each game's outcome from its score and discards
    the score, and converts the local start time to UTC.
@@ -63,7 +66,8 @@ importer downloads nothing, leaves the file unchanged, and prints
 5. Adds the parsed games of the downloaded seasons to the kept games, validates them together, and checks that each
    season from `history_start` through `--through-season` has a completed game and the adapter's completion marker:
    a completed Super Bowl (NFL) or a completed World Series game (MLB). `canonical-json` has no completion marker.
-6. Writes the file, with the SHA-256 of the configuration's franchise registry as `teams_sha256`.
+6. Writes the file, with the adapter's parser version as `adapter_version` and the SHA-256 of the configuration's
+   franchise registry as `teams_sha256`.
 
 The adapters print a warning, prefixed `Warning:`, for each listing they skip or repair, and the import still
 succeeds:
@@ -104,10 +108,11 @@ Games outside the imported seasons are dropped. Saved files make an import repea
 ## Output
 
 [Historical output](extending.md#historical-output) describes the file format. Games are sorted by season, UTC start
-time, and id. The other tools reject a history whose schema, league, or `teams_sha256` no longer match the
-configuration, and ask you to rerun the importer.
+time, and id. The other tools reject a history that isn't current, by the same checks as step 1 apart from game
+validation, and ask you to rerun the importer.
 
 Rerun the importer when a new season completes and after any change to franchise identities, aliases, or divisions.
+After an adapter change that bumps its version, the importer downloads every season again on its own.
 Then rerun [`generate-preseason-seed`](preseason-seed.md), whose seed records the history's hash, and
 [`simulate-season`](season-simulation.md), whose file [`evaluate-model`](model-evaluation.md) scores. The Pages
 workflow starts without saved data, so it downloads every league's full history before each build.

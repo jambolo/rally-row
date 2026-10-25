@@ -30,6 +30,16 @@ fn one_replay_builds_every_seasons_seed_as_a_replay_ending_before_it_does() {
 }
 
 #[test]
+fn a_first_season_without_earlier_history_is_reported_as_the_start() {
+    let (cfg, history) = evaluation_fixture();
+    let error = preseasons(&history, &cfg, cfg.history_start..=2006)
+        .err()
+        .unwrap()
+        .to_string();
+    assert!(error.contains("first target season"), "{error}");
+}
+
+#[test]
 fn season_elo_updates_match_the_historical_replay() {
     let (cfg, history) = evaluation_fixture();
     let Preseason { seed, games, .. } = preseasons(&history, &cfg, 2005..=2005).unwrap().remove(0);

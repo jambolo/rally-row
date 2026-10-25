@@ -1,4 +1,4 @@
-use crate::{GameFile, HISTORY_SCHEMA_VERSION, LeagueConfig, TuningSettings, adapter_for, scoring::standard_error, validate_games};
+use crate::{GameFile, LeagueConfig, TuningSettings, adapter_for, scoring::standard_error, validate_games};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize, Serializer};
 
@@ -48,12 +48,9 @@ pub fn validate(history: &GameFile, cfg: &LeagueConfig, split: Split) -> Result<
             && split.test_end < cfg.current_season(),
         "Require warm-up history, at least two tuning seasons, and later completed held-out seasons"
     );
+    history.ensure_current(cfg)?;
     ensure!(
-        history.schema_version == HISTORY_SCHEMA_VERSION && history.league == cfg.id && history.teams_sha256 == cfg.teams_sha256(),
-        "History schema, league, or franchise identities do not match configuration; rerun import-history"
-    );
-    ensure!(
-        history.from_season == cfg.history_start && history.through_season >= split.test_end,
+        history.through_season >= split.test_end,
         "History must cover {} through {}; rerun import-history with --through-season {}",
         cfg.history_start,
         split.test_end,

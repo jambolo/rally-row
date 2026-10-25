@@ -10,6 +10,9 @@ mod nflverse_csv;
 pub trait SourceAdapter: Sync {
     /// Registry key; equals `LeagueConfig.source.kind`.
     fn kind(&self) -> &'static str;
+    /// Parser revision recorded in `history.json`. Bump it whenever a change to `parse` changes the games it produces, so
+    /// saved histories are downloaded again instead of kept.
+    fn version(&self) -> u32;
     /// URLs whose bodies, in order, cover seasons `from_season..=through_season`.
     /// Whole-file sources return `vec![cfg.source.url.clone()]`; per-season sources return one URL per season.
     fn history_urls(&self, cfg: &LeagueConfig, from_season: i32, through_season: i32) -> Vec<String>;

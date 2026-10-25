@@ -153,8 +153,9 @@ Workflows in [`.github/workflows/`](.github/workflows/):
   missing project and web tags, then merges `master` into `develop` if it created a tag.
 - `pages.yml`: regenerates history and preseason seeds for every league (`--league nfl`, then `--league mlb`), builds
   the site with `data/` and `config/`, and deploys `apps/web/dist`. Runs on `master` pushes, manual
-  dispatch, and the first Tuesday at 09:17 UTC of each month that is some league's `season_rollover_month`; that run
-  publishes the league's new-season seed. A new league needs its own `import-history` and
+  dispatch, and a weekly check (Tuesdays at 09:17 UTC) that reads `master`'s configuration and dispatches a build on
+  `master` while some league's current-season seed is missing from the site. After a league's `season_rollover_month`,
+  that build publishes its new-season seed, and a failed build is retried the next week. A new league needs its own `import-history` and
   `generate-preseason-seed` lines in the workflow. Deployment runs separately from CD and does not wait for a release
   to succeed.
 

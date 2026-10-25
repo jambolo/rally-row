@@ -383,9 +383,10 @@ improvement means the selected parameters performed better. Neither tuning proce
 ## Model evaluation
 
 `evaluate-model` scores the model's predictions, made by `simulate-season` with the configured settings (the values
-adopted after tuning), and compares two ways of learning from in-season results. It scores the held-out seasons,
-`tune_end + 1` through `test_end` of the `bayes_tune` split (which falls back to `elo_tune`). The tuners never
-use those seasons to select parameters. Settings score better on the seasons used to choose
+adopted after tuning), and compares two ways of learning from in-season results. It scores the seasons that
+`simulate-season` saved: `tune_end + 1` through `test_end` of the split it ran with, by default the `bayes_tune` split
+(which falls back to `elo_tune`), unless its `--tune-end` or `--test-end` options override it. With the default split,
+the tuners never use those seasons to select parameters. Settings score better on the seasons used to choose
 them, so held-out scores give a fairer measure of forecasting skill.
 
 For each held-out season, preseason Elo ratings and the tie weight are rebuilt from earlier seasons only, and

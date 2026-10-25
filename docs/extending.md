@@ -149,6 +149,7 @@ A source adapter holds every rule specific to one provider format. A configurati
 The Rust trait `SourceAdapter` in `crates/rating-core/src/adapters/mod.rs` serves the importer, configuration validation, and the tuners' history checks:
 
 - `kind()`: the registry key, equal to `source.kind`.
+- `version()`: the parser revision, recorded in `history.json` as `adapter_version`. Bump it with any change to `parse` that changes the games it produces; a saved history from another version isn't current, so the importer downloads every season again and the other tools reject it until then.
 - `history_urls(cfg, from, through)`: URLs whose documents, in order, cover seasons `from` through `through`. Whole-file sources return one URL; per-season sources return one URL per season.
 - `parse(documents, cfg, warn)`: normalized but unvalidated games from downloaded or `--input` documents; unfinished games have no result.
 - `strict_source_ids()`: whether each game's source ids must be listed in the franchise era for its season.
@@ -222,13 +223,14 @@ The [importer](history-import.md) writes `data/<league>/history.json` with these
 
 | Field | Contents |
 | --- | --- |
-| `schema_version` | `4` |
+| `schema_version` | `5` |
 | `league` | League ID matching the configuration |
 | `fetched_at` | RFC 3339 timestamp of the import that last wrote the file |
 | `source_url` | Configured provider URL |
 | `from_season` | First included season |
 | `through_season` | Last included season, inclusive |
-| `teams_sha256` | SHA-256 of the configuration's `teams`, the franchise identity registry described in [Configuration](#configuration), serialized as compact JSON |
+| `adapter_version` | `version()` of the source adapter that parsed the games |
+| `teams_sha256` | SHA-256 of the configuration's `teams`, the franchise identity registry described in [Configuration](#configuration), as the Rust tools re-serialize it after parsing: compact JSON with each team's fields in the order `id`, `name`, `location`, `eras` and each era's in the order `from_season`, `through_season`, `name`, `location`, `abbreviation`, `division`, `source_ids`, `through_season: null` kept, and `abbreviation` and `division` omitted when absent. It is not a hash of the configuration file's bytes, so a tool that compares it must re-serialize `teams` the same way |
 | `games` | Array of normalized historical game records |
 
 Each game has the following structure:
@@ -303,8 +305,9 @@ To publish it, add the same two invocations to the `Generate league data` step o
           cargo run --release -p generate-preseason-seed -- --league <id>
 ```
 
-The workflow's scheduled build then publishes the league's new-season seed in its `season_rollover_month`. It reads
-each league's rollover month from `config/`, so the schedule needs no change.
+The workflow's weekly scheduled check then publishes the league's new-season seed after its `season_rollover_month`.
+It reads each league's id and rollover month from `master`'s `config/` and builds while any current-season seed is
+missing from the site, so the schedule needs no change.
 
 ## Tests and parity fixtures
 
