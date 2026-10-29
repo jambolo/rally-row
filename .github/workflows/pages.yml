@@ -6,8 +6,8 @@ on:
       - master
   workflow_dispatch:
   schedule:
-    # Rebuild monthly so every league's published Elo seeds stay current after its configured season rollover (season_rollover_month).
-    # The scheduled job limits this to the first Tuesday of each month at 09:17 UTC.
+    # Rebuild after each league's season rollover (season_rollover_month) so its new-season Elo seed gets published.
+    # The scheduled job checks every Tuesday at 09:17 UTC and builds only while a current-season seed is missing.
     - cron: '17 9 * * 2'
 
 concurrency:
@@ -21,18 +21,38 @@ permissions:
 
 jobs:
   schedule:
-    name: Schedule monthly build on master
+    name: Schedule rollover build on master
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     permissions:
       actions: write
+      contents: read
+      pages: read
     steps:
-      # Cron runs on the default branch; dispatch so deployment runs on master.
-      - name: Dispatch on the first Tuesday
+      # Cron runs on the default branch; read master's configuration, which the dispatched build uses.
+      - uses: actions/checkout@v7
+        with:
+          ref: master
+      # Only a rollover changes a published seed, so the build and its history downloads run only while some league's
+      # current-season seed is missing from the site. A failed build is retried the next week.
+      - name: Dispatch while a current-season seed is unpublished
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$(date -u +%d)" -le 7 ]; then
+          site=$(gh api "repos/$GITHUB_REPOSITORY/pages" --jq .html_url)
+          year=$(date -u +%Y)
+          month=$(date -u +%-m)
+          missing=
+          for config in config/*.json; do
+            league=$(jq -r .id "$config")
+            season=$(jq --argjson year "$year" --argjson month "$month" \
+              'if $month < .season_rollover_month then $year - 1 else $year end' "$config")
+            if ! curl -fsI -o /dev/null "${site%/}/data/$league/elo-$season.json"; then
+              echo "No published $league seed for $season"
+              missing=1
+            fi
+          done
+          if [ -n "$missing" ]; then
             gh workflow run pages.yml --ref master --repo "$GITHUB_REPOSITORY"
           fi
 
@@ -55,10 +75,10 @@ jobs:
       # The browser app reads these as static assets; they are generated, never committed.
       - name: Generate league data
         run: |
-          cargo run --release -p history-importer -- --league nfl
-          cargo run --release -p elo-ratings -- --league nfl
-          cargo run --release -p history-importer -- --league mlb
-          cargo run --release -p elo-ratings -- --league mlb
+          cargo run --release -p import-history -- --league nfl
+          cargo run --release -p generate-preseason-seed -- --league nfl
+          cargo run --release -p import-history -- --league mlb
+          cargo run --release -p generate-preseason-seed -- --league mlb
       - run: pnpm install --frozen-lockfile
         working-directory: apps/web
       - name: Build

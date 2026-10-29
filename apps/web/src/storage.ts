@@ -23,20 +23,23 @@ export async function readConfig(url: string, signal?: AbortSignal) {
   return { config: configSchema.parse(JSON.parse(decode(bytes))), hash: await digest(bytes) };
 }
 
+/** Reads the seed at `url` and checks it against the configuration and the published SHA-256 of its history,
+ * `historyHashUrl`.
+ */
 export async function readSeed(
   url: string,
-  historyUrl: string,
+  historyHashUrl: string,
   config: LeagueConfig,
   configHash: string,
   season: number,
   signal?: AbortSignal,
 ) {
-  return (await readSeedWithHash(url, historyUrl, config, configHash, season, signal)).seed;
+  return (await readSeedWithHash(url, historyHashUrl, config, configHash, season, signal)).seed;
 }
 
 export async function readSeedWithHash(
   url: string,
-  historyUrl: string,
+  historyHashUrl: string,
   config: LeagueConfig,
   configHash: string,
   season: number,
@@ -47,9 +50,10 @@ export async function readSeedWithHash(
   const seed = seedSchema.parse(JSON.parse(decode(bytes)));
   if (seed.league !== config.id || seed.target_season !== season || seed.through_season !== season - 1)
     throw new Error('Elo seed is for the wrong league or season; run the two Rust programs');
-  if (seed.config_sha256 !== configHash) throw new Error('Configuration changed since Elo was calculated; rerun elo-ratings');
-  if ((await digest(await fetchBytes(historyUrl, signal, 'no-cache'))) !== seed.history_sha256)
-    throw new Error('History changed since Elo was calculated; rerun elo-ratings');
+  if (seed.config_sha256 !== configHash)
+    throw new Error('Configuration changed since Elo was calculated; rerun generate-preseason-seed');
+  if (decode(await fetchBytes(historyHashUrl, signal, 'no-cache')).trim() !== seed.history_sha256)
+    throw new Error('History changed since Elo was calculated; rerun generate-preseason-seed');
   return { seed, hash: await digest(bytes) };
 }
 

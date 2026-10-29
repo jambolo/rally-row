@@ -1,35 +1,13 @@
 use anyhow::{Context, Result};
 use rating_core::{
-    BayesianSettings, EloSettings, GameFile, LeagueConfig, Outcome, apply_game,
-    bayesian::{Probabilities, outcome_probabilities},
-    expected_home,
+    BayesianSettings, EloSettings, LeagueConfig, Outcome, SimulatedSeasons,
+    bayesian::outcome_probabilities,
     scoring::{self, CalibrationBin, calibration, mean, standard_error},
-    tuning::{Split, validate},
-    walk_forward::{Preseason, posteriors_by_utc_date, preseason},
+    tuning::Split,
+    walk_forward::{Prediction, SeasonPredictions},
 };
 use serde::Serialize;
-use std::{cmp::Ordering, collections::BTreeMap, fmt::Write as _};
-
-/// One method's pregame forecast for a game.
-#[derive(Clone, Copy)]
-struct Prediction {
-    probabilities: Probabilities,
-    /// The method's expected fractional home score: win 1, tie 1/2, loss 0.
-    expected_home_score: f64,
-}
-
-impl Prediction {
-    fn from_probabilities(probabilities: Probabilities) -> Self {
-        Self {
-            probabilities,
-            expected_home_score: probabilities.home_win + probabilities.tie / 2.0,
-        }
-    }
-
-    fn favorite(&self) -> Ordering {
-        self.probabilities.home_win.total_cmp(&self.probabilities.away_win)
-    }
-}
+use std::{cmp::Ordering, fmt::Write as _};
 
 /// Every method's forecast for one held-out game, all made from the same pregame information.
 struct GameRow {
@@ -57,40 +35,30 @@ impl Method {
     }
 }
 
-/// Predicts every game of `season` from earlier UTC dates only; returns the season's tie weight and the rows.
-fn predict_season(history: &GameFile, cfg: &LeagueConfig, season: i32) -> Result<(f64, Vec<GameRow>)> {
-    // Both methods start from the same preseason Elo ratings and tie weight, built from earlier seasons only.
-    let Preseason { seed, games, .. } = preseason(history, cfg, season)?;
-    let mut ratings: BTreeMap<_, _> = seed.ratings.iter().map(|r| (r.team.clone(), r.elo)).collect();
-    let factor = std::f64::consts::LN_10 / cfg.elo.scale;
-    let mut rows = Vec::with_capacity(games.len());
-    for fit in posteriors_by_utc_date(&seed, &games, cfg) {
-        let (model, date_games) = fit?;
-        for g in date_games {
-            let nu = if cfg.ties_allowed_in.contains(&g.phase) {
-                seed.tie_weight
+/// One row per simulated game of `predicted`, adding the equal-strength baseline.
+fn season_rows(cfg: &LeagueConfig, predicted: SeasonPredictions) -> Result<Vec<GameRow>> {
+    let SeasonPredictions {
+        season,
+        tie_weight,
+        games,
+    } = predicted;
+    games
+        .into_iter()
+        .map(|p| {
+            let nu = if cfg.ties_allowed_in.contains(&p.game.phase) {
+                tie_weight
             } else {
                 0.0
             };
-            let (home, away) = (ratings[&g.home_team], ratings[&g.away_team]);
-            let advantage = if g.neutral { 0.0 } else { cfg.elo.home_advantage };
-            rows.push(GameRow {
+            Ok(GameRow {
                 season,
-                outcome: g.result.clone().context("Cannot score an unreported game")?,
-                bayesian: Prediction::from_probabilities(model.predict(&g.home_team, &g.away_team, g.neutral, &g.phase)?),
-                elo: Prediction {
-                    probabilities: outcome_probabilities(factor * (home - away + advantage), nu),
-                    expected_home_score: expected_home(home, away, g.neutral, &cfg.elo),
-                },
+                outcome: p.game.result.context("Cannot score an unreported game")?,
+                bayesian: p.bayesian,
+                elo: p.elo,
                 equal_strength: Prediction::from_probabilities(outcome_probabilities(0.0, nu)),
-            });
-        }
-        // Elo learns from a date only after all of its games are predicted, matching the Bayesian information set.
-        for g in date_games {
-            apply_game(&mut ratings, g, &cfg.elo)?;
-        }
-    }
-    Ok((seed.tie_weight, rows))
+            })
+        })
+        .collect()
 }
 
 #[derive(Clone, Copy)]
@@ -402,29 +370,32 @@ pub struct Report {
     notes: Vec<String>,
 }
 
-pub fn run(history: &GameFile, cfg: &LeagueConfig, split: Split, config_sha256: String, history_sha256: String) -> Result<Report> {
+/// Scores `simulated`, which `SimulatedSeasons::load` has checked against `cfg` and the history.
+pub fn run(cfg: &LeagueConfig, simulated: SimulatedSeasons) -> Result<Report> {
     let run_at = chrono::Utc::now().to_rfc3339();
-    validate(history, cfg, split)?;
+    let split = simulated.split;
     let (first, last) = (split.tune_end + 1, split.test_end);
-    eprintln!("Evaluating held-out seasons {first}–{last} with the configured settings...");
+    eprintln!("Scoring the simulated held-out seasons {first}–{last}...");
     let mut rows = Vec::new();
     let mut tie_weights = Vec::new();
-    for season in first..=last {
-        let (tie_weight, predicted) = predict_season(history, cfg, season)?;
-        eprintln!("Predicted {} games in season {season}", predicted.len());
-        tie_weights.push(SeasonTieWeight { season, tie_weight });
-        rows.extend(predicted);
+    for predicted in simulated.seasons {
+        eprintln!("Scoring {} games in season {}", predicted.games.len(), predicted.season);
+        tie_weights.push(SeasonTieWeight {
+            season: predicted.season,
+            tie_weight: predicted.tie_weight,
+        });
+        rows.extend(season_rows(cfg, predicted)?);
     }
     let bayesian = evaluate(&rows, Method::Bayesian)?;
     let elo = evaluate(&rows, Method::Elo)?;
     let comparison = compare(&rows, &bayesian, &elo);
     let mut notes: Vec<String> = [
-        "Offline: predictions use the league configuration's (tuned) Elo and Bayesian settings.",
+        "Offline: scores the predictions simulate-season saved in simulated-seasons.json, made with the league configuration's (tuned) Elo and Bayesian settings.",
         "Each held-out season starts from preseason Elo ratings and a tie weight built from earlier seasons only; both methods share them.",
         "Bayesian: each UTC date is predicted from a fresh posterior fit to earlier dates of the season, as in bayes-tune.",
         "Elo: ratings update after every game in start order, as in the historical replay, but each UTC date is predicted from the ratings at the start of that date, so neither method sees same-day outcomes. elo-tune also updates between games on the same date, so its held-out MSE can differ slightly.",
         "Elo three-way probabilities apply the Davidson tie term (the season's tie weight, zero where ties are not allowed) to the pregame Elo difference, keeping Elo's win odds in decisive games. Elo's expected score is its logistic expected score; the other methods use P(home win) + P(tie)/2.",
-        "Equal strength: no home advantage, the non-tie probability split evenly, and the season's tie weight at equal strength, as in the Node backtest.",
+        "Equal strength: no home advantage, the non-tie probability split evenly, and the season's tie weight at equal strength.",
         "Accuracy counts decisive games whose favored team won (an exact toss-up earns 1/2); ties are excluded from accuracy.",
         "Log loss uses natural logs and a 1e-15 probability floor; Brier score sums squared errors across all three outcomes; expected-score MSE compares the expected fractional home score with the observed score (win 1, tie 1/2, loss 0).",
         "Positive bayesian_advantage means the Bayesian predictions scored better (lower loss or higher accuracy). Standard errors are descriptive: held-out seasons are few, and games within a season share team-strength errors.",
@@ -441,9 +412,9 @@ pub fn run(history: &GameFile, cfg: &LeagueConfig, split: Split, config_sha256: 
     }
     Ok(Report {
         run_at,
-        league: cfg.id.clone(),
-        config_sha256,
-        history_sha256,
+        league: simulated.league,
+        config_sha256: simulated.config_sha256,
+        history_sha256: simulated.history_sha256,
         method: "Configured settings; preseason priors and tie weight from earlier seasons only; Bayesian Laplace posterior refit per UTC date versus Elo ratings updated after each game; both predict each UTC date from earlier dates only",
         split,
         holdout_seasons: [first, last],
@@ -540,7 +511,7 @@ pub fn summary(report: &Report) -> Result<String, std::fmt::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rating_core::replay_elo;
+    use rating_core::{bayesian::Probabilities, walk_forward::predict_season};
 
     fn prediction(home_win: f64, away_win: f64, tie: f64) -> Prediction {
         Prediction::from_probabilities(Probabilities { home_win, away_win, tie })
@@ -557,58 +528,23 @@ mod tests {
     }
 
     #[test]
-    fn season_elo_updates_match_the_historical_replay() {
+    fn rows_keep_the_season_predictions_and_add_the_equal_strength_baseline() {
         let (cfg, history) = test_support::evaluation_fixture();
-        let Preseason { seed, games, .. } = preseason(&history, &cfg, 2005).unwrap();
-        let mut ratings: BTreeMap<_, _> = seed.ratings.iter().map(|r| (r.team.clone(), r.elo)).collect();
-        for g in &games {
-            apply_game(&mut ratings, g, &cfg.elo).unwrap();
-        }
-        for r in replay_elo(&history.games, &cfg, 2005).unwrap().ratings {
-            assert!((ratings[&r.team] - r.elo).abs() < 1e-9, "{}", r.team);
-        }
-    }
-
-    #[test]
-    fn same_utc_day_results_never_reach_either_method_but_earlier_days_do() {
-        let (cfg, mut history) = test_support::evaluation_fixture();
-        let (_, before) = predict_season(&history, &cfg, 2005).unwrap();
-        // The fixture's first two 2005 games are a same-day doubleheader; the third is a week later.
-        let first = history.games.iter_mut().find(|g| g.id == "2005-1").unwrap();
-        first.result = Some(Outcome::AwayWin);
-        let (_, after) = predict_season(&history, &cfg, 2005).unwrap();
-        for i in 0..2 {
-            assert_eq!(
-                before[i].bayesian.probabilities.home_win,
-                after[i].bayesian.probabilities.home_win
-            );
-            assert_eq!(before[i].elo.probabilities.home_win, after[i].elo.probabilities.home_win);
-        }
-        assert_ne!(
-            before[2].bayesian.probabilities.home_win,
-            after[2].bayesian.probabilities.home_win
-        );
-        assert_ne!(before[2].elo.probabilities.home_win, after[2].elo.probabilities.home_win);
-    }
-
-    #[test]
-    fn elo_probabilities_keep_elo_odds_and_drop_ties_where_forbidden() {
-        let (cfg, history) = test_support::evaluation_fixture();
-        let (tie_weight, rows) = predict_season(&history, &cfg, 2005).unwrap();
-        assert!(tie_weight > 0.0);
-        for (row, game) in rows.iter().zip(history.games.iter().filter(|g| g.season == 2005)) {
-            let p = row.elo.probabilities;
-            assert!((p.home_win + p.away_win + p.tie - 1.0).abs() < 1e-12);
-            assert!((p.home_win / (p.home_win + p.away_win) - row.elo.expected_home_score).abs() < 1e-12);
+        let predicted = predict_season(&history, &cfg, 2005).unwrap();
+        let tie_weight = predicted.tie_weight;
+        let rows = season_rows(&cfg, predicted.clone()).unwrap();
+        assert_eq!(rows.len(), predicted.games.len());
+        for (row, p) in rows.iter().zip(&predicted.games) {
+            assert_eq!(row.season, 2005);
+            assert_eq!(Some(&row.outcome), p.game.result.as_ref());
+            assert_eq!(row.bayesian.probabilities.home_win, p.bayesian.probabilities.home_win);
+            assert_eq!(row.elo.expected_home_score, p.elo.expected_home_score);
             let e = row.equal_strength.probabilities;
             assert_eq!(e.home_win, e.away_win);
             assert!((row.equal_strength.expected_home_score - 0.5).abs() < 1e-15);
-            if game.phase == "postseason" {
-                assert_eq!(p.tie, 0.0);
-                assert_eq!(row.bayesian.probabilities.tie, 0.0);
+            if p.game.phase == "postseason" {
                 assert_eq!(e.tie, 0.0);
             } else {
-                assert!((p.tie - tie_weight / (2.0 * ((p.home_win / p.away_win).ln() / 2.0).cosh() + tie_weight)).abs() < 1e-12);
                 assert!((e.tie - tie_weight / (2.0 + tie_weight)).abs() < 1e-12);
             }
         }

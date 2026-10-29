@@ -5,7 +5,7 @@ This file provides guidance to AI when working with code in this repository.
 Rally Row predicts NFL and MLB game outcomes. A Rust workspace generates static league data offline, and a
 browser-only React app (`apps/web`) fits a Bayesian model in a Web Worker. There is no backend: GitHub Pages
 serves the app with `config/` and `data/` as static JSON. See [DEVELOPMENT.md](DEVELOPMENT.md) for the full
-command reference, release process, tuning and backtesting.
+command reference, release process, tuning and model evaluation.
 
 ## Commands
 
@@ -15,8 +15,8 @@ Run from the repository root. The docs write commands in PowerShell, and CI runs
 pnpm -C apps/web install --frozen-lockfile
 
 # Generate local data (needs network; output in data/ is gitignored). Required before the app works locally.
-cargo run --release -p history-importer -- --league nfl
-cargo run --release -p elo-ratings -- --league nfl      # repeat both for --league mlb
+cargo run --release -p import-history -- --league nfl
+cargo run --release -p generate-preseason-seed -- --league nfl      # repeat both for --league mlb
 
 pnpm -C apps/web dev                                    # served under /rally-row/; VITE_BASE overrides
 
@@ -47,18 +47,27 @@ adapters, Elo replay, the Bayesian model, tuning validation and the tuners' sear
 season-by-season prediction from earlier UTC dates (`walk_forward.rs`), and forecast scores (`scoring.rs`). The
 binaries in `apps/` are thin CLIs over it, so logic two tools share belongs in the library.
 
-1. `history-importer --league <id>` downloads the provider's history through the league's source adapter and
-   writes `data/<id>/history.json`. It replaces the file only if every season is complete, so a failure leaves the
+1. `import-history --league <id>` downloads the provider's history through the league's source adapter and
+   writes `data/<id>/history.json`. It keeps the seasons a current file already holds and downloads only later ones
+   (`--refresh` downloads all). It replaces the file only if every season is complete, so a failure leaves the
    previous file in place.
-2. `elo-ratings --league <id>` replays history and writes `data/<id>/elo-<season>.json`. The seed embeds SHA-256
-   hashes of the config and history bytes. The browser and the backtest reject a seed whose hashes don't match,
-   so rerun `elo-ratings` after any config or history change.
+2. `generate-preseason-seed --league <id>` replays history and writes `data/<id>/elo-<season>.json`. The seed
+   embeds SHA-256 hashes of the config and history bytes. The browser rejects a seed whose hashes don't match, so
+   rerun `generate-preseason-seed` after any config or history change.
 3. `elo-tune` and `bayes-tune` are offline parameter searches. They never modify config.
-4. `evaluate-model` scores the model's predictions, made with the configured settings, on held-out seasons, which
-   tuning never uses. It compares Bayesian predictions with in-season Elo ratings.
+4. `simulate-season --league <id>` simulates the held-out seasons, which tuning never uses, one UTC date at a time
+   with the configured settings and writes every game's pregame Bayesian and Elo predictions to
+   `data/<id>/simulated-seasons.json` for evaluation tools. The file embeds config and history hashes; consumers
+   reject a file whose hashes don't match, as `SimulatedSeasons::load` does. The preseason seeds, built in one
+   history replay (`walk_forward::preseasons`), the per-season prediction (`Preseason::predict`), and the file
+   contract (`SimulatedSeasons`) live in `rating-core`.
+5. `evaluate-model` scores the predictions in `simulated-seasons.json` without refitting the model. It compares
+   Bayesian predictions with in-season Elo ratings.
 
-The custom `projectData` plugin in `apps/web/vite.config.ts` serves the root `config/` and `data/` directories
-in dev, and copies them into the build.
+The custom `projectData` plugin in `apps/web/vite.config.ts` serves the files the app reads from the root `config/`
+and `data/` directories in dev, and copies them into the build: `config/<id>.json`, `data/<id>/elo-<season>.json`, and
+`data/<id>/history.sha256`, the SHA-256 of `history.json`, in place of the history itself. Nothing else under `data/` is
+published.
 
 ### Browser runtime (`apps/web/src`)
 
@@ -112,7 +121,15 @@ the CD workflow then tags them and merges `master` back into `develop`. Pages de
 ## Docs map
 
 - `README.md`: user-facing behavior of the app, described in detail. Keep it in sync with UI changes.
-- `DEVELOPMENT.md`: setup, CLI options, checks, releases, tuning, model evaluation, backtesting.
+- `DEVELOPMENT.md`: setup, CLI options, checks, releases, tuning, model evaluation, season simulation.
 - `docs/model.md`: statistical methodology (Elo, the Davidson–Bradley–Terry Bayesian model, two-way
   moneylines, tuning, model evaluation).
 - `docs/extending.md`: adding leagues and source adapters, and the parity-fixture table.
+- One page per tool, covering its options, checks, errors, and output. Keep each in sync with its tool's CLI and
+  output format:
+  - `docs/history-import.md`: `import-history` and saved provider files.
+  - `docs/preseason-seed.md`: `generate-preseason-seed` and the `elo-<season>.json` seed format.
+  - `docs/elo-tuning.md`: `elo-tune`, the split options and checks the evaluation tools share, and its report.
+  - `docs/bayesian-tuning.md`: `bayes-tune` and its report.
+  - `docs/model-evaluation.md`: `evaluate-model`, its summary, and its report.
+  - `docs/season-simulation.md`: `simulate-season`, its season simulation, and the `simulated-seasons.json` format.

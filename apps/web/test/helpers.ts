@@ -1,24 +1,25 @@
 import { readFileSync } from 'node:fs';
-import { configSchema, type EloSeed, type Game } from '../src/contracts.ts';
+import { configSchema, SEED_SCHEMA_VERSION, type EloSeed, type Game } from '../src/contracts.ts';
 import { digest } from '../src/storage.ts';
 
 export const configBytes = readFileSync(new URL('../../../config/nfl.json', import.meta.url));
 export const config = configSchema.parse(JSON.parse(configBytes.toString()));
-export const historyBytes = 'history';
 // Hashing is asynchronous in the browser, so the fixtures resolve it once at module load.
 export const configHash = await digest(configBytes);
-export const historyHash = await digest(historyBytes);
+export const historyHash = await digest('history');
+/** The published `history.sha256`, as the site build writes it. */
+export const historyHashFile = `${historyHash}
+`;
 
 export function seed(): EloSeed {
   return {
-    schema_version: 1,
+    schema_version: SEED_SCHEMA_VERSION,
     league: 'nfl',
     target_season: 2026,
     through_season: 2025,
     generated_at: '2026-09-01T00:00:00Z',
     history_sha256: historyHash,
     config_sha256: configHash,
-    settings: config.elo,
     completed_games: 100,
     tied_games: 1,
     tie_weight: 0.02,

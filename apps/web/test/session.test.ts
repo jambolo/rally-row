@@ -7,7 +7,7 @@ import { readSnapshot, snapshotKey } from '../src/snapshot.ts';
 import type { SessionView } from '../src/session.ts';
 import type { RefreshMessage } from '../src/refresh-worker.ts';
 import { fakeIndexedDb } from './fake-indexeddb.ts';
-import { config, configHash, game, historyBytes, seed } from './helpers.ts';
+import { config, configHash, game, historyHashFile, seed } from './helpers.ts';
 
 class BackgroundWorker {
   onmessage: ((event: MessageEvent<RefreshMessage>) => void) | null = null;
@@ -39,7 +39,7 @@ function storeOf(entries: Record<string, string>) {
 async function setup({ withSnapshot = true } = {}) {
   const built = memoryStore();
   vi.stubGlobal('fetch', (url: string) =>
-    Promise.resolve(new Response(url.endsWith('history.json') ? historyBytes : JSON.stringify(seed()))),
+    Promise.resolve(new Response(url.endsWith('history.sha256') ? historyHashFile : JSON.stringify(seed()))),
   );
   const service = new PredictionService({
     config: { ...config, source: { ...config.source, kind: 'canonical-json' } },

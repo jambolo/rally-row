@@ -1,8 +1,8 @@
-use crate::{GameFile, HISTORY_SCHEMA_VERSION, LeagueConfig, TuningSettings, adapter_for, scoring::standard_error, validate_games};
+use crate::{GameFile, LeagueConfig, TuningSettings, adapter_for, scoring::standard_error, validate_games};
 use anyhow::{Context, Result, bail, ensure};
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 
-#[derive(Clone, Copy, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Split {
     pub warmup_start: i32,
     pub tune_start: i32,
@@ -48,13 +48,10 @@ pub fn validate(history: &GameFile, cfg: &LeagueConfig, split: Split) -> Result<
             && split.test_end < cfg.current_season(),
         "Require warm-up history, at least two tuning seasons, and later completed held-out seasons"
     );
+    history.ensure_current(cfg)?;
     ensure!(
-        history.schema_version == HISTORY_SCHEMA_VERSION && history.league == cfg.id && history.teams == cfg.teams,
-        "History schema, league, or franchise identities do not match configuration; rerun history-importer"
-    );
-    ensure!(
-        history.from_season == cfg.history_start && history.through_season >= split.test_end,
-        "History must cover {} through {}; rerun history-importer with --through-season {}",
+        history.through_season >= split.test_end,
+        "History must cover {} through {}; rerun import-history with --through-season {}",
         cfg.history_start,
         split.test_end,
         split.test_end

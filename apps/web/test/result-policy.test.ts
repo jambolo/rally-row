@@ -4,7 +4,7 @@ import { PredictionService } from '../src/service.ts';
 import { readSnapshot, snapshotKey } from '../src/snapshot.ts';
 import { memoryStore, type Store } from '../src/storage.ts';
 import type { LeagueConfig } from '../src/contracts.ts';
-import { config, configHash, game, historyBytes, seed } from './helpers.ts';
+import { config, configHash, game, historyHashFile, seed } from './helpers.ts';
 
 const dataBase = 'https://published.test/data';
 const now = () => new Date('2026-09-19T18:00:00Z');
@@ -23,7 +23,7 @@ const canonical = {
 
 function publish() {
   const published: Record<string, string> = {
-    [`${dataBase}/nfl/history.json`]: historyBytes,
+    [`${dataBase}/nfl/history.sha256`]: historyHashFile,
     [`${dataBase}/nfl/elo-2026.json`]: JSON.stringify(seed()),
   };
   vi.stubGlobal('fetch', (input: string | URL | Request) => {

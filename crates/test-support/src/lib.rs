@@ -2,7 +2,7 @@
 
 pub mod cli;
 
-use rating_core::{BayesianSettings, EloTuneSettings, Game, GameFile, HISTORY_SCHEMA_VERSION, LeagueConfig, Outcome};
+use rating_core::{BayesianSettings, EloTuneSettings, Game, GameFile, HISTORY_SCHEMA_VERSION, LeagueConfig, Outcome, adapter_for};
 use serde_json::Value;
 use std::{fs, ops::RangeInclusive, path::Path};
 
@@ -32,7 +32,8 @@ pub fn history_file(cfg: &LeagueConfig, seasons: RangeInclusive<i32>, games: Vec
         source_url: cfg.source.url.clone(),
         from_season: *seasons.start(),
         through_season: *seasons.end(),
-        teams: cfg.teams.clone(),
+        adapter_version: adapter_for(&cfg.source.kind).unwrap().version(),
+        teams_sha256: cfg.teams_sha256(),
         games,
     }
 }

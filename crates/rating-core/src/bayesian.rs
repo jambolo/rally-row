@@ -1,34 +1,24 @@
 //! Bradley–Terry–Davidson likelihood and Laplace approximation, matching apps/web/src/model.ts.
-use crate::{Audit, BayesianSettings, EloSeed, Game, LeagueConfig, Outcome};
+use crate::{BayesianSettings, EloSeed, Game, LeagueConfig, Outcome, Update};
 use anyhow::{Context, Result, ensure};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[derive(Clone, Default)]
 pub struct TieHistory {
     denominators: Vec<f64>,
     pub tied_games: usize,
 }
 
 impl TieHistory {
-    pub fn from_audit(audit: &[Audit], games: &[Game], cfg: &LeagueConfig) -> Result<Self> {
-        let games: BTreeMap<_, _> = games.iter().map(|g| (g.id.as_str(), g)).collect();
-        let mut denominators = Vec::new();
-        let mut tied_games = 0;
-        for entry in audit {
-            let g = games
-                .get(entry.game_id.as_str())
-                .context("Elo audit game missing from history")?;
-            if cfg.ties_allowed_in.contains(&g.phase) {
-                let advantage = if g.neutral { 0.0 } else { cfg.elo.home_advantage };
-                let difference = std::f64::consts::LN_10 * (entry.home_before - entry.away_before + advantage) / cfg.elo.scale;
-                denominators.push(2.0 * (difference / 2.0).cosh());
-                tied_games += usize::from(g.result == Some(Outcome::Tie));
-            }
+    /// Adds a replayed `game` with its rating `update`; only phases that allow ties count.
+    pub(crate) fn add(&mut self, game: &Game, update: &Update, cfg: &LeagueConfig) {
+        if cfg.ties_allowed_in.contains(&game.phase) {
+            let advantage = if game.neutral { 0.0 } else { cfg.elo.home_advantage };
+            let difference = std::f64::consts::LN_10 * (update.home_before - update.away_before + advantage) / cfg.elo.scale;
+            self.denominators.push(2.0 * (difference / 2.0).cosh());
+            self.tied_games += usize::from(game.result == Some(Outcome::Tie));
         }
-        Ok(Self {
-            denominators,
-            tied_games,
-        })
     }
 
     pub fn estimate(&self, settings: &BayesianSettings) -> f64 {
@@ -49,7 +39,7 @@ impl TieHistory {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Probabilities {
     pub home_win: f64,
     pub away_win: f64,

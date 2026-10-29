@@ -45,8 +45,6 @@ fn seeds_are_chronological_tie_aware_and_regressed_exactly_once() {
     let lv = seed.ratings.iter().find(|t| t.team == "LV").unwrap();
     assert!((lv.elo - (cfg.elo.initial + 10.0 * 2.0 / 3.0)).abs() < 1e-9);
     assert_eq!(seed.completed_games, 1); // Scheduled game is not an observation.
-    assert_eq!(seed.audit[0].home_before, cfg.elo.initial);
-    assert_eq!(seed.audit[0].home_after, cfg.elo.initial + 10.0);
     assert!(seed.tie_weight > 0.0);
     let mut reversed = history.clone();
     reversed.games.reverse();
@@ -54,15 +52,25 @@ fn seeds_are_chronological_tie_aware_and_regressed_exactly_once() {
     assert_eq!(seed.ratings[0].elo, again.ratings[0].elo);
     assert!(build_seed(&history, &bytes, &cfg, b"config", 2004).is_err());
     let mut obsolete = history.clone();
-    for version in [1, 2] {
+    for version in [1, 2, 3] {
         obsolete.schema_version = version;
         assert!(
             build_seed(&obsolete, &bytes, &cfg, b"config", 2003)
                 .unwrap_err()
                 .to_string()
-                .contains("rerun history-importer")
+                .contains("rerun import-history")
         );
     }
+    let mut renamed = cfg.clone();
+    let team = &mut renamed.teams[0];
+    team.name.push_str(" Renamed");
+    team.eras.last_mut().unwrap().name.clone_from(&team.name);
+    assert!(
+        build_seed(&history, &bytes, &renamed, b"config", 2003)
+            .unwrap_err()
+            .to_string()
+            .contains("Team identity history changed")
+    );
     let mut leaked = history;
     leaked.games[0].season = 2003;
     assert!(build_seed(&leaked, &bytes, &cfg, b"config", 2003).is_err());
@@ -132,7 +140,8 @@ fn relocation_preserves_one_rating_history_and_original_source_ids() {
     let team = output.ratings.iter().find(|t| t.team == "LV").unwrap();
     assert_eq!(team.games, 2);
     assert!(team.elo > cfg.elo.initial);
-    assert!(output.audit[1].home_before > cfg.elo.initial); // Rename did not reset the rating.
+    let replay = replay_elo(&history.games, &cfg, 2020).unwrap();
+    assert!(replay.audit[1].home_before > cfg.elo.initial); // Rename did not reset the rating.
     assert!(parse_source(&input.replace("OAK", "LV"), &cfg).is_err());
 }
 

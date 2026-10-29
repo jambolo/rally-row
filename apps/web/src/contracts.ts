@@ -249,15 +249,16 @@ export const gameFileSchema = z.object({
   games: z.array(gameSchema),
 });
 export type GameFile = z.infer<typeof gameFileSchema>;
+/** Equals `SEED_SCHEMA_VERSION` in `crates/rating-core/src/lib.rs`; both test suites check it against the parity fixture. */
+export const SEED_SCHEMA_VERSION = 2;
 export const seedSchema = z.object({
-  schema_version: z.literal(1),
+  schema_version: z.literal(SEED_SCHEMA_VERSION),
   league: z.string(),
   target_season: z.number().int(),
   through_season: z.number().int(),
   generated_at: z.iso.datetime({ offset: true }),
   history_sha256: z.string().length(64),
   config_sha256: z.string().length(64),
-  settings: eloSchema,
   completed_games: z.number().int().nonnegative(),
   tied_games: z.number().int().nonnegative(),
   tie_weight: finite.positive(),

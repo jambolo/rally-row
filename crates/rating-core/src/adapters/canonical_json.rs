@@ -18,6 +18,9 @@ impl SourceAdapter for CanonicalJson {
     fn kind(&self) -> &'static str {
         "canonical-json"
     }
+    fn version(&self) -> u32 {
+        1
+    }
     fn history_urls(&self, cfg: &LeagueConfig, _from_season: i32, _through_season: i32) -> Vec<String> {
         vec![cfg.source.url.clone()]
     }

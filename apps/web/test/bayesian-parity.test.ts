@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { fitPosterior, predict } from '../src/model.ts';
-import type { EloSeed, Game, LeagueConfig } from '../src/contracts.ts';
+import { SEED_SCHEMA_VERSION, type EloSeed, type Game, type LeagueConfig } from '../src/contracts.ts';
 
 // Both implementations consume this fixture, so model changes cannot silently invalidate Rust tuning.
 const fixture = JSON.parse(
@@ -27,6 +27,7 @@ const fixture = JSON.parse(
 };
 
 it('matches the shared Rust Bayesian parity fixture', () => {
+  expect(fixture.seed.schema_version).toBe(SEED_SCHEMA_VERSION);
   for (const sample of fixture.cases) {
     const model = fitPosterior(fixture.seed, fixture.games.slice(0, sample.training_count), fixture.config);
     model.means.forEach((v, i) => expect(v).toBeCloseTo(sample.means[i], 9));

@@ -104,20 +104,13 @@
     }
   },
   "seed": {
-    "schema_version": 1,
+    "schema_version": 2,
     "league": "nfl",
     "target_season": 2025,
     "through_season": 2024,
     "generated_at": "2025-08-01T00:00:00Z",
     "history_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-    "settings": {
-      "initial": 1500,
-      "scale": 400,
-      "k": 40,
-      "home_advantage": 45,
-      "offseason_regression": 0.383333
-    },
     "completed_games": 100,
     "tied_games": 1,
     "tie_weight": 0.02,

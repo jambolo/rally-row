@@ -1,5 +1,5 @@
 [package]
-name = "elo-ratings"
+name = "generate-preseason-seed"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,4 +10,5 @@ clap.workspace = true
 rating-core.workspace = true
 
 [dev-dependencies]
+serde_json.workspace = true
 test-support.workspace = true

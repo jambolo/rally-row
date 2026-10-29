@@ -1,5 +1,5 @@
 use chrono::{TimeZone, Utc};
-use rating_core::{EloSeed, Game, LeagueConfig, Outcome, Rating, bayesian::fit_posterior};
+use rating_core::{EloSeed, Game, LeagueConfig, Outcome, Rating, SEED_SCHEMA_VERSION, bayesian::fit_posterior};
 use test_support::league_config;
 
 // Mirrored by apps/web/test/fit-scale.test.ts: same generator, seed value, and fixed model settings, so both
@@ -55,14 +55,13 @@ fn synthetic_season(value: u32, cfg: &LeagueConfig) -> (EloSeed, Vec<Game>) {
         });
     }
     let seed = EloSeed {
-        schema_version: 1,
+        schema_version: SEED_SCHEMA_VERSION,
         league: cfg.id.clone(),
         target_season: 2026,
         through_season: 2025,
         generated_at: "2026-09-01T00:00:00Z".into(),
         history_sha256: String::new(),
         config_sha256: String::new(),
-        settings: cfg.elo.clone(),
         completed_games: 0,
         tied_games: 0,
         tie_weight: 0.0003,
@@ -75,7 +74,6 @@ fn synthetic_season(value: u32, cfg: &LeagueConfig) -> (EloSeed, Vec<Game>) {
                 games: 162,
             })
             .collect(),
-        audit: Vec::new(),
     };
     (seed, games)
 }
